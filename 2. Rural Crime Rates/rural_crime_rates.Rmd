@@ -1,0 +1,225 @@
+---
+title: "Rural Crime Rates"
+author: "Cormac Nolan"
+date: "30 September 2015"
+output: html_document
+---
+
+
+
+```{r, echo = F, include = F}
+library(bloRg)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+
+library(knitr)
+
+opts_chunk$set(fig.width=8, fig.height=8)
+opts_chunk$set(echo = F, warning = F, error = F, message = F)
+
+```
+
+```{r functions, echo = F, include = F}
+
+
+
+```
+
+```{r import & cleaning}
+data.raw <- read.csv("regional_crime_stats_all.csv")
+gardai.employed <- read.csv("Gardai_employed.csv")
+
+# Generic clean for CSO style data
+data.clean <- cso_category_clean(data.raw, 51)
+
+# Modify the date variable
+data.clean <-
+  data.clean %>%
+  rename(id = X., year.quarter = X..1) %>%
+  separate(year.quarter, c("year", "quarter"), sep = 4, remove = F) %>%
+  mutate(id = 1:nrow(data.clean))
+  
+# Make sure variables are consistent
+data.clean$year <- as.factor(data.clean$year)
+data.clean$quarter <- as.factor(data.clean$quarter)
+data.clean$category.code <- as.factor(data.clean$category.code)
+data.clean$category.name <- as.factor(data.clean$category.name)
+
+gardai.employed <-
+  gardai.employed %>% 
+  rename(year = Employment..Number..by.Sub.Sector.and.Quarter) %>% 
+  mutate(year = as.factor(year), Quarter = as.factor(Quarter))
+
+data.clean$quarter.dates <-
+  as.Date(as.POSIXct(zoo::as.yearqtr(data.clean$year.quarter, 
+                                   format = "%YQ%q")))
+
+gardai.employed$quarter.dates <-
+  paste(gardai.employed$year, gardai.employed$Quarter, sep = "Q")
+  
+gardai.employed$quarter.dates <-
+  as.Date(as.POSIXct(zoo::as.yearqtr(gardai.employed$quarter.dates,
+                                     format = "%YQ%q")))
+
+```
+
+
+```{r cleaning & filtering for burglary }
+# deselct the more urban counties and separate out the category variable
+data.clean.rural <-
+  data.clean %>%
+  select(- X14..Louth..Garda.Division, - X23..Galway.Garda.Division,
+        - X31..Cork.City.Garda.Division, -X35..Limerick.Garda.Division,
+        - X42..Meath..Garda.Division, - X43..Wicklow..Garda.Division,
+        - X61..D.M.R..South.Central.Garda.Division, 
+        - X62..D.M.R..North.Central.Garda.Division,
+        - X63..D.M.R..Northern.Garda.Division,
+        - X64..D.M.R..Southern.Garda.Division,
+        - X65..D.M.R..Eastern.Garda.Division,
+        - X66..D.M.R..Western.Garda.Division)
+
+data.clean.rural$rural.area.sum <-
+  rowSums(data.clean.rural[,5:20])
+
+data.clean.rural.burglary <-
+  data.clean.rural %>%
+  filter(substr(category.code, 1,2) == "07")
+
+
+
+```
+
+## Gardaí Employed in the State
+```{r Gardaí employed}
+
+p.gardai <- ggplot(gardai.employed, aes(quarter.dates, Garda.Siochana))
+
+p.gardai +
+  geom_line(stat = "identity", 
+            colour = blog_palette[2], 
+            size = 1.5, 
+            alpha = 0.8) +
+  geom_line(stat = "smooth", colour = "black", size = 1.2)+
+  blog_theme +
+  labs(title = "Number of Gardaí Employed in the State",
+       x = "Year & Quarter",
+       y = "Number of Gardaí")
+```
+
+## Rural Burglary Rates
+```{r total rural burglary rates}
+
+p.burglary <- ggplot(filter(data.clean.rural.burglary, 
+                            category.code == "07"),
+                     aes(quarter.dates, rural.area.sum, group = 1))
+
+p.burglary +
+  geom_line(stat = "identity", 
+            colour = blog_palette[1], 
+            size = 1.5, 
+            alpha = 0.7) +
+  geom_line(stat = "smooth", colour = "black", size = 1.2)+
+  blog_theme +
+  labs(title = "Total Burglary Related Crime in Rural Garda Districts",
+       x = "Year & Quarter",
+       y = "Total Numer of Incidents")
+  
+
+```
+
+
+```{r total rural burglary rates - by type of incident}
+
+p.burglary.categories <- 
+  ggplot(filter(data.clean.rural.burglary, category.code != "07"),
+         aes(quarter.dates, rural.area.sum, group = 1, colour = category.name))
+
+p.burglary.categories +
+  geom_line(stat = "identity", 
+            size = 1.5, 
+            alpha = 0.5) +
+  geom_line(stat = "smooth", colour = "black", size = 1.2)+
+  facet_wrap(~ category.name, ncol = 1, scales = "free") +
+  blog_theme +
+  theme(legend.position = "none",
+        panel.grid.major.x = element_blank())+
+  labs(title = "Total Burglary Related Crime in Rural Garda Districts",
+       x = "Year & Quarter",
+       y = "Total Numer of Incidents") +
+  scale_color_manual(values = blog_palette)
+
+```
+
+## Countrywide Burglary Rates
+```{r total country burglary rates}
+
+data.clean$country.area.sum <-
+  rowSums(data.clean[,5:31])
+  
+p.country.burglary <- ggplot(filter(data.clean, 
+                            category.code == "07"),
+                     aes(quarter.dates, country.area.sum, group = 1))
+
+p.country.burglary +
+  geom_line(stat = "identity", 
+            colour = blog_palette[1], 
+            size = 1.5, 
+            alpha = 0.7) +
+  geom_line(stat = "smooth", colour = "black", size = 1.2)+
+  blog_theme +
+  labs(title = "Total Burglary Related Crime in All Garda Districts",
+       x = "Year & Quarter",
+       y = "Total Numer of Incidents")
+  
+
+```
+
+
+```{r total country burglary rates - by type of incident}
+
+p.country.burglary.categories <- 
+  ggplot(filter(data.clean, substr(category.code, 1,3) == "071"),
+         aes(quarter.dates, country.area.sum, group = 1, colour = category.name))
+
+p.country.burglary.categories +
+  geom_line(stat = "identity", 
+            size = 1.5, 
+            alpha = 0.5) +
+  geom_line(stat = "smooth", colour = "black", size = 1.2)+
+  facet_wrap(~ category.name, ncol = 1, scales = "free") +
+  blog_theme +
+  theme(legend.position = "none",
+        panel.grid.major.x = element_blank())+
+  labs(title = "Total Burglary Related Crime in All Garda Districts",
+       x = "Year & Quarter",
+       y = "Total Numer of Incidents") +
+  scale_color_manual(values = blog_palette)
+  
+
+  
+
+
+```
+
+
+## Quarterly Variation
+```{r quarterly variation}
+s.country.quarter.variation <-
+  data.clean %>%
+  filter(category.code == "07") %>% 
+    group_by(quarter) %>%
+    summarise(total.burglaries = sum(country.area.sum))
+
+
+p.country.quarter.variation <-
+  ggplot(s.country.quarter.variation,
+         aes(quarter, total.burglaries))
+
+p.country.quarter.variation +
+  geom_bar(stat = "identity", aes(fill = quarter))+
+  blog_theme +
+  scale_fill_manual(values = blog_palette)
+
+
+```

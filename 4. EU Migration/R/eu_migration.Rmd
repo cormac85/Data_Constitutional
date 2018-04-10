@@ -1,0 +1,28 @@
+---
+title: "EU Migration"
+author: "Cormac Nolan"
+date: "10 April 2018"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r import}
+emmigration_raw <- readr::read_tsv("./data/tps00177_emmigration.tsv")
+immigration_raw <- readr::read_tsv("./data/tps00176_immigration.tsv")
+
+```
+
+## Migration {.tabset}
+Blah Blah
+### Trends
+```{r}
+
+```
+
+
+

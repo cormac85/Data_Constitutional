@@ -9,6 +9,7 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(tidyverse)
 ```
 
 ```{r import}
@@ -17,10 +18,50 @@ immigration_raw <- readr::read_tsv("./data/tps00176_immigration.tsv")
 
 ```
 
+```{r clean}
+imm_clean <-
+  immigration_raw %>% mutate_at(.vars = vars(starts_with("2")),
+                                .funs = stringr::str_extract, 
+                                 pattern = "[0-9]+") %>% 
+  rename(variable = "citizen,agedef,age,unit,sex,geo\\time") %>% 
+  separate(variable, into = c("a", "b", "c", "d", "e", "country_code"),
+           sep = ",") %>% 
+  select(-a, -b, -c, -d, -e) %>% 
+  gather(key = year, value = immigrants, `2005`:`2016`) %>% 
+  mutate(immigrants = as.numeric(immigrants))
+
+emm_clean <-
+  emmigration_raw %>% mutate_at(.vars = vars(starts_with("2")),
+                                .funs = stringr::str_extract, 
+                                 pattern = "[0-9]+") %>% 
+  rename(variable = "citizen,agedef,age,unit,sex,geo\\time") %>% 
+  separate(variable, into = c("a", "b", "c", "d", "e", "country_code"),
+           sep = ",") %>% 
+  select(-a, -b, -c, -d, -e) %>% 
+  gather(key = year, value = emmigrants, `2005`:`2016`) %>% 
+  mutate(emmigrants = as.numeric(emmigrants))
+  
+imm_emm_clean <- 
+  imm_clean %>% 
+  left_join(emm_clean, by = c("country_code", "year")) %>% 
+  mutate(net_migration = immigrants - emmigrants)
+
+```
+
 ## Migration {.tabset}
 Blah Blah
+
+### Initial Exploration
+```{r}
+imm_emm_clean %>% 
+  group_by(year) %>% 
+  summarise_if(is.numeric, sum, na.rm = TRUE)
+
+
+```
 ### Trends
 ```{r}
+
 
 ```
 

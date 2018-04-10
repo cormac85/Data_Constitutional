@@ -9,23 +9,35 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+knitr::opts_knit$set(root.dir = '../' )
 library(tidyverse)
+library(stringr)
 ```
 
+## Import and Clean
 ```{r import}
 emmigration_raw <- readr::read_tsv("./data/tps00177_emmigration.tsv")
 immigration_raw <- readr::read_tsv("./data/tps00176_immigration.tsv")
+population_raw <- readr::read_tsv("./data/tps00001_population.tsv")
+# Country codes are ISO standard, except for Greece 
+# (GR -> EL) and United Kingdom (GB -> UK).
+# http://www.nationsonline.org/oneworld/country_code_list.htm
+country_codes <- readr::read_csv("./data/world_country_codes.csv")
 
 ```
+
+I had to filter out certain years and countries in order to get a complete dataset and have a consistent set of countries to compare. Randomly adding/subtracting countries in certain years could give false impressions.  
+On the chopping block was Bulgaria, Belgium, Liechtenstein and Romania. You'll have to ask their respective national statistics offices why they didn't report their data for certain years! The year 2005 was quite incomplete so was also dropped. 
 
 ```{r clean}
 imm_clean <-
   immigration_raw %>% mutate_at(.vars = vars(starts_with("2")),
                                 .funs = stringr::str_extract, 
                                  pattern = "[0-9]+") %>% 
-  rename(variable = "citizen,agedef,age,unit,sex,geo\\time") %>% 
+  dplyr::rename(variable = "citizen,agedef,age,unit,sex,geo\\time") %>% 
   separate(variable, into = c("a", "b", "c", "d", "e", "country_code"),
-           sep = ",") %>% 
+           sep = ",") %>%
+  filter(b == "COMPLET") %>% 
   select(-a, -b, -c, -d, -e) %>% 
   gather(key = year, value = immigrants, `2005`:`2016`) %>% 
   mutate(immigrants = as.numeric(immigrants))
@@ -34,18 +46,44 @@ emm_clean <-
   emmigration_raw %>% mutate_at(.vars = vars(starts_with("2")),
                                 .funs = stringr::str_extract, 
                                  pattern = "[0-9]+") %>% 
-  rename(variable = "citizen,agedef,age,unit,sex,geo\\time") %>% 
+  dplyr::rename(variable = "citizen,agedef,age,unit,sex,geo\\time") %>% 
   separate(variable, into = c("a", "b", "c", "d", "e", "country_code"),
            sep = ",") %>% 
+  filter(b == "COMPLET") %>% 
   select(-a, -b, -c, -d, -e) %>% 
   gather(key = year, value = emmigrants, `2005`:`2016`) %>% 
   mutate(emmigrants = as.numeric(emmigrants))
+
+pop_clean <-
+  population_raw %>% mutate_at(.vars = vars(starts_with("2")),
+                                .funs = stringr::str_extract, 
+                                 pattern = "[0-9]+") %>% 
+  dplyr::rename(variable = "indic_de,geo\\time") %>% 
+  separate(variable, into = c("a", "country_code"),
+           sep = ",") %>% 
+  select(-a) %>% 
+  gather(key = year, value = population, `2006`:`2017`) %>% 
+  mutate(population = as.numeric(population))
   
-imm_emm_clean <- 
+  
+migration_clean <- 
   imm_clean %>% 
   left_join(emm_clean, by = c("country_code", "year")) %>% 
-  mutate(net_migration = immigrants - emmigrants)
+  left_join(pop_clean, by = c("country_code", "year")) %>%
+  left_join(country_codes, by = c("country_code" = "a2_code")) %>% 
+  mutate(net_migration = immigrants - emmigrants,
+         net_migration_per_cap = net_migration / population) %>% 
+  select(-a3_code, -num_code) %>% 
+  filter(!(country %in% c("Bulgaria", "Belgium",
+                          "Liechtenstein", "Romania"))) %>% 
+  filter(year != 2005)
 
+rm(imm_clean, emm_clean, pop_clean, country_codes)
+
+is.na(migration_clean) %>% sum() # No NA's for this subset!
+glimpse(migration_clean)
+migration_clean$country %>% unique()
+migration_clean$year %>% unique()
 ```
 
 ## Migration {.tabset}
@@ -53,12 +91,43 @@ Blah Blah
 
 ### Initial Exploration
 ```{r}
-imm_emm_clean %>% 
+
+migration_year_summary <-
+  migration_clean %>% 
   group_by(year) %>% 
-  summarise_if(is.numeric, sum, na.rm = TRUE)
+  summarise(sum_immigrants = sum(immigrants),
+            sum_emmigrants = sum(emmigrants),
+            total_population = sum(population),
+            total_net_migration = sum(net_migration),
+            mean_net_migration_per_capita = mean(net_migration_per_cap))
 
+migration_country_summary <-
+  migration_clean %>% 
+  group_by(country) %>% 
+  summarise(sum_immigrants = sum(immigrants),
+            sum_emmigrants = sum(emmigrants),
+            total_population = sum(population),
+            total_net_migration = sum(net_migration),
+            mean_net_migration_per_capita = mean(net_migration_per_cap))
 
+migration_year_summary %>% ungroup() %>% 
+  select(year, sum_immigrants, sum_emmigrants) %>% 
+  gather(key = "movement_type", value = "count",
+         sum_immigrants:sum_emmigrants) %>% 
+  ggplot(aes(year, count, colour = movement_type, group = movement_type)) + 
+  geom_line(size = 1.5) +
+  blorg::blog_theme +
+  scale_colour_manual(values = blorg::blog_palette)
+
+migration_clean %>% ungroup() %>% 
+  select(country, year, immigrants) %>% 
+  ggplot(aes(year, immigrants, colour = country, group = country)) + 
+  geom_line(size = 1.5) +
+  blorg::blog_theme 
+  
+  
 ```
+
 ### Trends
 ```{r}
 

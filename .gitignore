@@ -31,7 +31,6 @@
 *.RData
 *.csv
 *.Rd
-*.rda
 
 # Other files #
 ###############

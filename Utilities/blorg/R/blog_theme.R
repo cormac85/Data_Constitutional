@@ -14,13 +14,16 @@
 # library(ggplot2)
 #
 # blog_theme <-
-#   ggplot2::theme(plot.title = element_text(face = 2, size = 18, hjust = 0),
+#   ggplot2::theme(plot.title = element_text(face = 2, size = 18, hjust = 0,
+#                                            colour = blorg::blog_palette[2]),
 #                  axis.title = element_text(colour = blorg::blog_palette[2],
 #                                            face = 2, size = 14),
 #                  axis.text = element_text(colour = blorg::blog_palette[2],
 #                                           size = 12),
 #                  axis.text.x = element_text(hjust = 1, vjust = 1,
 #                                             angle = 45),
+#                  axis.ticks.y = element_blank(),
+#                  axis.ticks.x = element_line(colour = blorg::blog_palette[2]),
 #                  strip.background =
 #                    element_rect(fill = blorg::blog_palette[2]),
 #                  strip.text = element_text(face = "bold", colour = "white",

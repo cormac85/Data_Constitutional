@@ -36,4 +36,12 @@
 #                                                    size = 1))
 #
 # save(blog_theme, file = "./data/blog_theme.rda")
+#
+# Test:
+# ggplot2::ggplot(data.frame(a = c(1,2,3), b = c("a", "b", "c")),
+# ggplot2::aes(x = b, y = a, fill = b)) +
+#   ggplot2::geom_bar(stat = "identity") +
+#   ggplot2::labs(title = "blah") +
+#   blorg::blog_theme +
+#   ggplot2::scale_fill_manual(values = blorg::blog_palette)
 

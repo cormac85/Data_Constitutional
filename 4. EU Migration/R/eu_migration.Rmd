@@ -14,7 +14,16 @@ library(tidyverse)
 library(stringr)
 ```
 
-## Import and Clean
+## Introduction {.tabset}
+Back in those innocent days of 2015, the "migration crisis" in Europe was dominating the headlines all over the continent. At the time I'd been interested in diving into the data around the actual migration figures in European countries, to see if there was any data signal behind the narrative (there is btw). As the way life goes I never got around to it but recently I was able to block out some time to dive into the data, sourced from the EU itself. 
+
+This is a simple descriptive analysis including any explorations, warts and all. I hope the final visualisations are able to capute the essence of the when, where and scale of the crisis.
+
+_Also, please remember that the data used here is for total immigration and emmigration for each country and so includes migration **within** the region, as well as migration to / from the region._ 
+
+### Import and Clean
+First we import the [data from Eurostat](http://ec.europa.eu/eurostat/web/population-demography-migration-projections/migration-and-citizenship-data/main-tables) and clean it to the best we can. Overall the data quality is pretty excellent.
+
 ```{r import}
 emmigration_raw <- readr::read_tsv("./data/tps00177_emmigration.tsv")
 immigration_raw <- readr::read_tsv("./data/tps00176_immigration.tsv")
@@ -82,16 +91,21 @@ rm(imm_clean, emm_clean, pop_clean, country_codes)
 
 is.na(migration_clean) %>% sum() # No NA's for this subset!
 glimpse(migration_clean)
-migration_clean$country %>% unique()
-migration_clean$year %>% unique()
 ```
 
-## Migration {.tabset}
-Blah Blah
-
 ### Initial Exploration
+List of countries under analysis:
 ```{r}
+migration_clean$country %>% unique()
 
+migration_clean$country %>% unique() %>% length()
+
+```
+Bulgaria, Belgium, Liechtenstein and Romania are not included due to missing data.
+
+Overall there seems to have been a net migration into these European countries for each year of the series. When divided out by country we can see Germany in 2015 was a huge outlier.
+
+```{r}
 migration_year_summary <-
   migration_clean %>% 
   group_by(year) %>% 
@@ -110,6 +124,7 @@ migration_country_summary <-
             total_net_migration = sum(net_migration),
             mean_net_migration_per_capita = mean(net_migration_per_cap))
 
+# European-wide immigration vs emmigration
 migration_year_summary %>% ungroup() %>% 
   select(year, sum_immigrants, sum_emmigrants) %>% 
   gather(key = "movement_type", value = "count",
@@ -119,20 +134,96 @@ migration_year_summary %>% ungroup() %>%
   blorg::blog_theme +
   scale_colour_manual(values = blorg::blog_palette)
 
+# Country number immigrants
 migration_clean %>% ungroup() %>% 
   select(country, year, immigrants) %>% 
   ggplot(aes(year, immigrants, colour = country, group = country)) + 
   geom_line(size = 1.5) +
   blorg::blog_theme 
-  
+
+# Net migration per capita
+migration_clean %>% 
+  select(country, year, net_migration_per_cap) %>% 
+  ggplot(aes(year, net_migration_per_cap * 1000, 
+             colour = country, group = country)) + 
+  geom_line(size = 1.5) +
+  blorg::blog_theme 
   
 ```
 
-### Trends
+
+### Net Migration
+If we compare the 3 countries with the largest amount of positive net migration over the period (Germany, Italy, UK) a couple of things stand out. 
+
+1. The rest of the region had large positive net migration before the financial crisis, and it started to recover after 2013.
+2. Germany in 2015 was a ridiculous outlier, comparable to the rest of the region pre-2008.
+
 ```{r}
+most_net_migrants <-
+  migration_country_summary %>% ungroup() %>% 
+  arrange(total_net_migration) %>% 
+  select(country, total_net_migration) %>% 
+  top_n(3)
 
+migration_clean$countries_most_net_migrants <-
+  if_else(migration_clean$country %in% most_net_migrants$country, 
+          migration_clean$country, "Other")
+  
+migration_clean %>% 
+  select(countries_most_net_migrants, year, net_migration) %>% 
+  group_by(countries_most_net_migrants, year) %>% 
+  summarise(total_net_migration = sum(net_migration)) %>% 
+  ggplot(aes(year, total_net_migration, 
+             colour = countries_most_net_migrants, 
+             group = countries_most_net_migrants)) + 
+  geom_path(size = 1.5) +
+  blorg::blog_theme +
+  scale_colour_manual(values = blorg::blog_palette)
+```
+
+This is just a different way of visualising the above. I think it tells the broad story of migration across the overall region quite well.
+```{r}
+migration_clean %>% 
+  select(countries_most_net_migrants, year, net_migration) %>% 
+  group_by(countries_most_net_migrants, year) %>% 
+  summarise(total_net_migration = sum(net_migration)) %>% 
+  ggplot(aes(year, total_net_migration, 
+             fill = countries_most_net_migrants, 
+             group = countries_most_net_migrants)) + 
+  geom_bar(position = "stack", stat = "identity") +
+  blorg::blog_theme +
+  scale_fill_manual(values = blorg::blog_palette)
 
 ```
 
+### Net Migration Per Capita
+The problem with net migration on its own is that it can be skewed by the larger countries (Germany etc.) in regards the "impact" on the local government and population. I.e., if 1000,000 people land in Germany in 1 year (net), it's disruptive but not catastrophic; if the same number landed on Iceland (population ~ 300,000) it would be a humanitarian disaster.
 
+There are a couple of ways I thought to look at this, one is per capita, the other is against some economic metric like GDP. Below is a sequence of bar charts of the net migration per 1000 for each country, sorted by  population (Germany largest, Iceland smallest). It was the best way I could think of plotting it while keeping all the data on the page.
 
+```{r, fig.width = 12, fig.height = 8}
+
+country_order_by_pop <-
+  (migration_clean %>% 
+  filter(year == 2016) %>% 
+  arrange(desc(population)))$country
+  
+
+migration_clean %>% 
+  select(country, year, net_migration_per_cap) %>%
+  mutate(country = factor(country, levels = country_order_by_pop)) %>% 
+  ggplot(aes(year, net_migration_per_cap * 1000, 
+             fill = country, group = country)) + 
+  geom_bar(stat = "identity") +
+  blorg::blog_theme +
+  facet_wrap(~country, ncol = 7) +
+  theme(legend.position = "none") +
+  labs(title = "European Net Migration per 1000 - Ordered By 2016 Population", x = "Year", y = "Net Migration per 1000 Population") +
+  scale_x_discrete(breaks = scales::pretty_breaks(n = 5))
+
+```
+
+What I like about this plot, is that each one tells a different story for each country but comparisons between plots are still quite easy. What really jumps out to me is how some countries have stayed so relatively stable (e.g. Finland, United Kingdom) over a long period of time which includes some titanic economic and political events, while others have swung wildly (e.g. Germany, Ireland, Cyprus). The 2008 financial crisis was obviously a huge contributor to the overall picture.
+
+### Net Migration Per GNP
+Blah

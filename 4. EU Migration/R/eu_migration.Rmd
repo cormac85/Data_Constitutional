@@ -28,6 +28,7 @@ First we import the [data from Eurostat](http://ec.europa.eu/eurostat/web/popula
 emmigration_raw <- readr::read_tsv("./data/tps00177_emmigration.tsv")
 immigration_raw <- readr::read_tsv("./data/tps00176_immigration.tsv")
 population_raw <- readr::read_tsv("./data/tps00001_population.tsv")
+gdp_raw <- readr::read_tsv("./data/tec00001_GDP.tsv")
 # Country codes are ISO standard, except for Greece 
 # (GR -> EL) and United Kingdom (GB -> UK).
 # http://www.nationsonline.org/oneworld/country_code_list.htm
@@ -74,20 +75,41 @@ pop_clean <-
   gather(key = year, value = population, `2006`:`2017`) %>% 
   mutate(population = as.numeric(population))
   
+
+gdp_clean <- 
+  gdp_raw %>% 
+  mutate_at(.vars = vars(starts_with("2")),
+                                .funs = stringr::str_extract, 
+                                 pattern = "[0-9]+") %>% 
+  dplyr::rename(variable = "na_item,unit,geo\\time") %>% 
+  separate(variable, into = c("a", "gdp_metric", "country_code"),
+           sep = ",") %>% 
+  filter(gdp_metric %in% c("CP_EUR_HAB", "CP_MPPS")) %>% 
+  select(-a) %>% 
+  gather(key = year, value = gdp, `2006`:`2017`) %>% 
+  mutate(gdp = as.numeric(gdp))
   
+
 migration_clean <- 
   imm_clean %>% 
   left_join(emm_clean, by = c("country_code", "year")) %>% 
   left_join(pop_clean, by = c("country_code", "year")) %>%
+  left_join(filter(gdp_clean, gdp_metric == "CP_EUR_HAB"),
+            by = c("country_code", "year")) %>%
+  left_join(filter(gdp_clean, gdp_metric == "CP_MPPS"),
+            by = c("country_code", "year")) %>%
   left_join(country_codes, by = c("country_code" = "a2_code")) %>% 
   mutate(net_migration = immigrants - emmigrants,
          net_migration_per_cap = net_migration / population) %>% 
-  select(-a3_code, -num_code) %>% 
+  rename(gdp_per_capita = gdp.x, gdp_pps = gdp.y) %>% 
+  select(-a3_code, -num_code, -gdp_metric.x, -gdp_metric.y) %>% 
   filter(!(country %in% c("Bulgaria", "Belgium",
                           "Liechtenstein", "Romania"))) %>% 
-  filter(year != 2005)
+  filter(year != 2005) %>% 
+  mutate(gdp_pps_per_net_migrant = gdp_pps / net_migration)
 
-rm(imm_clean, emm_clean, pop_clean, country_codes)
+rm(imm_clean, emm_clean, pop_clean, country_codes, gdp_clean)
+rm(immigration_raw, emmigration_raw, population_raw, gdp_raw)
 
 is.na(migration_clean) %>% sum() # No NA's for this subset!
 glimpse(migration_clean)
@@ -181,7 +203,7 @@ migration_clean %>%
   scale_colour_manual(values = blorg::blog_palette)
 ```
 
-This is just a different way of visualising the above. I think it tells the broad story of migration across the overall region quite well.
+This is just a different way of visualising the above using bars. Note the huge dip in the 2009-2013 period for the overall region which gets a bit lost in the previous line plot.  
 ```{r}
 migration_clean %>% 
   select(countries_most_net_migrants, year, net_migration) %>% 
@@ -225,5 +247,7 @@ migration_clean %>%
 
 What I like about this plot, is that each one tells a different story for each country but comparisons between plots are still quite easy. What really jumps out to me is how some countries have stayed so relatively stable (e.g. Finland, United Kingdom) over a long period of time which includes some titanic economic and political events, while others have swung wildly (e.g. Germany, Ireland, Cyprus). The 2008 financial crisis was obviously a huge contributor to the overall picture.
 
-### Net Migration Per GNP
-Blah
+### Summary
+The biggest take away I have from this exercise is that each country has gone through it's own very particular story around net migration. Ireland and the dramatic decline from 2008 onwards, Germany and it's huge peak in 2015, the outsized impact on the mediterranean states that are closer to Africa and the Middle East, Cyprus plummeting into negative territory after the 2010 European banking crisis etc. 
+
+On a larger scale the overall drop in net migratioin to the whole region from 2009-2013 is also quite remarkable when compared to the current situation and before 2008. It begs many political questions around future planning and current "sharing of the load" across the region. Luckily I can leave that to the political analysts, numbers are far easier to understand than people.

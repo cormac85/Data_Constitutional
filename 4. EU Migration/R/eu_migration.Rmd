@@ -12,6 +12,9 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 knitr::opts_knit$set(root.dir = '../' )
 library(tidyverse)
 library(stringr)
+library(maptools)
+library(ggmap)
+library(blorg)
 ```
 
 ## Introduction {.tabset}
@@ -108,7 +111,7 @@ migration_clean <-
   filter(year != 2005) %>% 
   mutate(gdp_pps_per_net_migrant = gdp_pps / net_migration)
 
-rm(imm_clean, emm_clean, pop_clean, country_codes, gdp_clean)
+rm(imm_clean, emm_clean, pop_clean, gdp_clean)
 rm(immigration_raw, emmigration_raw, population_raw, gdp_raw)
 
 is.na(migration_clean) %>% sum() # No NA's for this subset!
@@ -142,7 +145,7 @@ migration_country_summary <-
   group_by(country) %>% 
   summarise(sum_immigrants = sum(immigrants),
             sum_emmigrants = sum(emmigrants),
-            total_population = sum(population),
+            mean_population = mean(population),
             total_net_migration = sum(net_migration),
             mean_net_migration_per_capita = mean(net_migration_per_cap))
 
@@ -246,6 +249,56 @@ migration_clean %>%
 ```
 
 What I like about this plot, is that each one tells a different story for each country but comparisons between plots are still quite easy. What really jumps out to me is how some countries have stayed so relatively stable (e.g. Finland, United Kingdom) over a long period of time which includes some titanic economic and political events, while others have swung wildly (e.g. Germany, Ireland, Cyprus). The 2008 financial crisis was obviously a huge contributor to the overall picture.
+
+### Mapping Migration
+Mapping out the gross and per capital net migration we see there are quite strong differences, for example Germany really stands out on the gross figure, but under per capita it seems to above average but not exceptional.
+
+First the net migration:
+```{r}
+
+# http://ec.europa.eu/eurostat/web/gisco/geodata/reference-data/administrative-units-statistical-units/nuts#nuts13
+euro_map <- 
+  maptools::readShapePoly(fn="./data/NUTS/NUTS_RG_60M_2013_4326.shp")
+
+euro_limits <- data.frame(lon = c(60.64878, 24.08464, -31.26192, 56.00000),
+                          lat = c(80.58823, 34.83469, 39.45479, 74.00000))
+
+euro_map_df <- euro_map %>% fortify(region='NUTS_ID')
+euro_map_df <-
+  euro_map_df %>% 
+  left_join(country_codes, by = c("id" = "a2_code")) %>% 
+  left_join(migration_country_summary, by = "country") %>% 
+  filter(long > min(euro_limits$lon) & long < max(euro_limits$lon) &
+           lat  > min(euro_limits$lat) & lat  < max(euro_limits$lat),
+         !is.na(country)) # remove lower NUTS regsions
+
+m0 <- ggplot(data=euro_map_df)
+
+m0 + geom_polygon(aes(x=long, y=lat, group=group, 
+                            fill=total_net_migration)) +
+  geom_path(aes(x=long, y=lat, group=group), color='black') +
+  coord_equal() +
+  theme_void() + 
+  scale_fill_gradientn(colours=topo.colors(3),
+                       labels = scales::comma,
+                        name = "Total Net Migration\n 2006-2016" )
+                        
+```
+
+Then the net migration per capita:
+```{r}
+m0 + geom_polygon(aes(x=long, y=lat, group=group, 
+                            fill=(mean_net_migration_per_capita * 1000))) +
+  geom_path(aes(x=long, y=lat, group=group), color='black') +
+  coord_equal() +
+  theme_void() + 
+  scale_fill_gradientn(colours=topo.colors(3),
+                       labels = scales::comma,
+                        name = "Mean Net Migration\nper 1000 Population\n2006-2016")
+                        
+```
+
+Luxembourg is a pretty big outlier per 1000 but the only has a population of approximately 600,000, that's only about 9,000 net migrants in 10 years.
 
 ### Summary
 The biggest take away I have from this exercise is that each country has gone through it's own very particular story around net migration. Ireland and the dramatic decline from 2008 onwards, Germany and it's huge peak in 2015, the outsized impact on the mediterranean states that are closer to Africa and the Middle East, Cyprus plummeting into negative territory after the 2010 European banking crisis etc. 

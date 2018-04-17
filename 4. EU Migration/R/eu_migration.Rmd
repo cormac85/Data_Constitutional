@@ -300,6 +300,41 @@ m0 + geom_polygon(aes(x=long, y=lat, group=group,
 
 Luxembourg is a pretty big outlier per 1000 but the only has a population of approximately 600,000, that's only about 9,000 net migrants in 10 years.
 
+Now let's look More closely at 2015 itself when the Germany accepted so many immigrants.
+```{r}
+
+
+euro_map_2015_df <-
+  euro_map %>% fortify(region='NUTS_ID') %>% 
+  left_join(country_codes, by = c("id" = "a2_code")) %>% 
+  left_join((migration_clean %>% filter(year == 2015)),
+            by = "country") %>% 
+  filter(long > min(euro_limits$lon) & long < max(euro_limits$lon) &
+           lat  > min(euro_limits$lat) & lat  < max(euro_limits$lat),
+         !is.na(country)) # remove lower NUTS regsions
+
+m_2015 <- ggplot(data=euro_map_2015_df)
+
+m_2015 + geom_polygon(aes(x=long, y=lat, group=group, 
+                            fill=net_migration)) +
+  geom_path(aes(x=long, y=lat, group=group), color='black') +
+  coord_equal() +
+  theme_void() + 
+  scale_fill_gradientn(colours=topo.colors(3),
+                       labels = scales::comma,
+                        name = "Net Migration\n 2015" )
+
+m_2015 + geom_polygon(aes(x=long, y=lat, group=group, 
+                            fill=(net_migration_per_cap * 1000))) +
+  geom_path(aes(x=long, y=lat, group=group), color='black') +
+  coord_equal() +
+  theme_void() + 
+  scale_fill_gradientn(colours=topo.colors(3),
+                       labels = scales::comma,
+                        name = "Net Migration\nper 1000 Population\n2015")
+                        
+```
+
 ### Summary
 The biggest take away I have from this exercise is that each country has gone through it's own very particular story around net migration. Ireland and the dramatic decline from 2008 onwards, Germany and it's huge peak in 2015, the outsized impact on the mediterranean states that are closer to Africa and the Middle East, Cyprus plummeting into negative territory after the 2010 European banking crisis etc. 
 

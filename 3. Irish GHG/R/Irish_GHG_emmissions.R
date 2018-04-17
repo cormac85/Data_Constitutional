@@ -6,7 +6,7 @@
 # The GHG emissions will be analysed in relation to 
 # other metrics, economic or otherwise.
 
-library(bloRg)
+library(blorg)
 library(magrittr)
 library(gridExtra)
 library(grid)
@@ -40,8 +40,7 @@ conversion.function <- function(x){
 }
 
 # Import
-raw.ghg.data <- 
-  read.csv("./irish_GHG_emissions.csv")
+raw.ghg.data <- datakindr::get_cso_dataset("EAA01")
 
 # Clean
 melted.ghg.data <-

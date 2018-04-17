@@ -40,7 +40,7 @@ country_codes <- readr::read_csv("./data/world_country_codes.csv")
 ```
 
 I had to filter out certain years and countries in order to get a complete dataset and have a consistent set of countries to compare. Randomly adding/subtracting countries in certain years could give false impressions.  
-On the chopping block was Bulgaria, Belgium, Liechtenstein and Romania. You'll have to ask their respective national statistics offices why they didn't report their data for certain years! The year 2005 was quite incomplete so was also dropped. 
+On the chopping block were Bulgaria, Belgium, Liechtenstein and Romania. You'll have to ask their respective national statistics offices why they didn't report their data for certain years! The year 2005 was quite incomplete so was also dropped. 
 
 ```{r clean}
 imm_clean <-

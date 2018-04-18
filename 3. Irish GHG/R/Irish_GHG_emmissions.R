@@ -7,10 +7,12 @@
 # other metrics, economic or otherwise.
 
 library(blorg)
-library(magrittr)
+library(dplyr)
+library(ggplot2)
 library(gridExtra)
 library(grid)
 library(scales)
+library(datakindr) # github/cormac85/datakindr
 
 calculate_per_capita_GHGs <- function(ghg.data,
                                       population){
@@ -24,80 +26,34 @@ calculate_per_capita_GHGs <- function(ghg.data,
   
 }
 
-conversion.function <- function(x){
-  
-  # converts the tonnes of GHG's to tonnes of CO2 equivalents
-  
-  conversion.N2O <- 298
-  conversion.CH4 <- 25
-  
-  
-  x[27:39, 2:23] <- x[27:39, 2:23] * conversion.N2O
-  
-  x[40:52, 2:23] <- x[40:52, 2:23] * conversion.CH4
-  
-  x
-}
 
 # Import
 raw.ghg.data <- datakindr::get_cso_dataset("EAA01")
 
 # Clean
-melted.ghg.data <-
-  cso_category_clean(raw.ghg.data, category.num.rows = 14)
-
-melted.ghg.data$X. <- NULL
-melted.ghg.data$category.name <- NULL
-
-melted.ghg.data <- 
-  melted.ghg.data %>% 
-  rename(Year = X..1,
-         category = category.code)
-
-# Create short categories
-category.names <- unique(melted.ghg.data$category)
-category.short.names <- c("Total GHG's", "CO2", "N2O", "CH4")
-
-melted.ghg.data$category.short.names <- NA
-for(i in 1:length(category.names)){
+clean.ghg.data <- 
+  raw.ghg.data %>% 
+  mutate(statistic.short =
+           case_when(Statistic ==  "Carbon Dioxide (CO2) Emissions (000 Tonnes)" ~ "CO2",
+                     Statistic ==  "Nitrous Oxide (N2O) Emissions (000 Tonnes)" ~ "N2O",
+                     Statistic ==  "Methane (CH4) Emissions (000 Tonnes)" ~ "CH4",
+                     Statistic ==  "All Greenhouse Gas Emissions (000 Tonnes CO2 equivalent)" ~ "TOTAL")) %>% 
+  mutate(co2.equivalent =
+           case_when(statistic.short == "N2O" ~ value * 298,
+                     statistic.short == "CH4" ~ value * 25,
+                     TRUE ~ value))
   
-  melted.ghg.data[melted.ghg.data$category == category.names[i], 25] <-
-    category.short.names[i]
-    
-}
-
 # Totals Plot
-ggplot(melted.ghg.data, aes(Year, Total.emissions, 
-                            colour = category.short.names)) +
+ggplot(clean.ghg.data %>% filter(statistic.short == "TOTAL",
+                                 Sector == "All Emissions"), 
+       aes(Year, value,
+           colour = statistic.short, group=1)) +
   geom_line(size = 1.5) +
   blog_theme +
   scale_color_manual(values = blog_palette)
 
 # Multiply by conversion factors
 # From here: http://www.epa.gov/energy/greenhouse-gas-equivalencies-calculator
-
-
-
-
-converted.ghg.data <-
-  conversion.function(melted.ghg.data)
-
-
-test.theme <- 
-  theme(plot.title = element_text(colour = blog_palette[2],
-                                  face = 2, size = 18, hjust = 0),
-        axis.title = element_text(colour = blog_palette[2], face = 2,
-                                  size = 14),
-        axis.text = element_text(colour = blog_palette[2], size = 12),
-        axis.text.x = element_text(hjust = 1, vjust = 1, angle = 45),
-        strip.background = element_rect(fill = blog_palette[2]),
-        strip.text = element_text(face = "bold", colour = "white",
-                                  size = rel(1.2), vjust = 0.5),
-        panel.background = element_rect(fill = paste0(blog_palette[6], 30)),
-        panel.grid.minor = element_blank(),
-        panel.grid.major.x = element_blank(),
-        panel.grid.major.y = element_line(colour = "white",
-                                        size = 1))
 
 p.ghg.converted<-
   ggplot(converted.ghg.data, aes(Year, Total.emissions, 

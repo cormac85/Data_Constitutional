@@ -14,30 +14,27 @@ library(grid)
 library(scales)
 library(datakindr) # github/cormac85/datakindr
 
-calculate_per_capita_GHGs <- function(ghg.data,
-                                      population){
-  # Function to calculate the ghg per capita given populationa and ghg data
-  
-  ghg.data$population <- population$Population.Count
-  
-  ghg.data %>% 
-    mutate(ghg.emmissions.tons.per.capita = 
-             (Total.emissions * 1000) / population)
-  
-}
-
-
 # Import
-raw.ghg.data <- datakindr::get_cso_dataset("EAA01")
+raw.ghg.data <- datakindr::get_cso_dataset("EAA09")
+irish.population <- datakindr::get_cso_dataset("PEA11")
+
+
+irish.population <- 
+  irish.population %>% 
+  filter(Sex == "Both sexes", `Single Year of Age` == "All ages") %>% 
+  select(`Year`, value) %>% 
+  rename(population = value)
 
 # Clean
+# Multiply by conversion factors
+# From here: http://www.epa.gov/energy/greenhouse-gas-equivalencies-calculator
 clean.ghg.data <- 
   raw.ghg.data %>% 
   mutate(statistic.short =
-           case_when(Statistic ==  "Carbon Dioxide (CO2) Emissions (000 Tonnes)" ~ "CO2",
-                     Statistic ==  "Nitrous Oxide (N2O) Emissions (000 Tonnes)" ~ "N2O",
-                     Statistic ==  "Methane (CH4) Emissions (000 Tonnes)" ~ "CH4",
-                     Statistic ==  "All Greenhouse Gas Emissions (000 Tonnes CO2 equivalent)" ~ "TOTAL")) %>% 
+           case_when(Statistic == raw.ghg.data$Statistic[1] ~ "TOTAL",
+                     Statistic == raw.ghg.data$Statistic[2] ~ "CO2",
+                     Statistic == raw.ghg.data$Statistic[3] ~ "N2O",
+                     Statistic == raw.ghg.data$Statistic[4] ~ "CH4")) %>% 
   mutate(co2.equivalent =
            case_when(statistic.short == "N2O" ~ value * 298,
                      statistic.short == "CH4" ~ value * 25,
@@ -45,56 +42,48 @@ clean.ghg.data <-
   
 # Totals Plot
 ggplot(clean.ghg.data %>% filter(statistic.short == "TOTAL",
-                                 Sector == "All Emissions"), 
+                                 `Sector NACE Rev 2` == "Total emissions"), 
        aes(Year, value,
            colour = statistic.short, group=1)) +
   geom_line(size = 1.5) +
   blog_theme +
   scale_color_manual(values = blog_palette)
 
-# Multiply by conversion factors
-# From here: http://www.epa.gov/energy/greenhouse-gas-equivalencies-calculator
 
-p.ghg.converted<-
-  ggplot(converted.ghg.data, aes(Year, Total.emissions, 
-                                 colour = category.short.names)) +
+p.ghg <-
+  ggplot(clean.ghg.data %>% filter(statistic.short != "TOTAL",
+                                 `Sector NACE Rev 2` == "Total emissions"),
+       aes(Year, co2.equivalent, colour = statistic.short, 
+           group = statistic.short)) +
   geom_line(size = 1.5) +
-  test.theme +
+  blog_theme +
   scale_color_manual(values = blog_palette, name = "GHG Type") +
-  scale_x_continuous(breaks = c(2000, 2004, 2008, 2012)) +
+  scale_x_discrete(breaks = c(2000, 2004, 2008, 2012, 2016)) +
   labs(title = "Irish Contribution GHG's in CO2 Equivalent",
        y = "Total Emissions In CO2 Equivalent (1000 Tons)") +
   theme(legend.position = "top")
 
-p.ghg.converted
+p.ghg
 
-# Read in the population estimates.
-irish.population <- read.csv("irish_population_estimates.csv", header = F,
-                             col.names = c("Gender", "Year", 
-                                           "Population.Count"))
-irish.population %<>% 
-  filter(Gender == "Both sexes") %>% 
-  select(Year, Population.Count) %>% 
-  filter((Year >= 2000) & (Year <= 2012))
-
-
-converted.ghg.data <- 
-  calculate_per_capita_GHGs(converted.ghg.data, irish.population)
+enriched.ghg <- 
+  clean.ghg.data %>% 
+  left_join(irish.population, by = "Year")
   
 # Plot Combined Plot
 
 p.population <-
-  ggplot(converted.ghg.data, aes(Year, population)) +
-  geom_line(size = 1.5) +
-  test.theme +
+  ggplot(enriched.ghg %>% filter(`Sector NACE Rev 2` == "Total emissions"),
+         aes(Year, population)) +
+  geom_line(size = 1.5, group = 1) +
+  blog_theme +
   scale_color_manual(values = blog_palette) +
-  scale_x_continuous(breaks = c(2000, 2004, 2008, 2012)) +
+  scale_x_discrete(breaks = c(2000, 2004, 2008, 2012, 2016)) +
   scale_y_continuous(breaks = c(3.8e6, 4.2e6, 4.6e6),
                      labels = c("3.8", "4.2", "4.6")) +
-  theme(axis.ticks.margin = unit(c(0, 0, 0.2, 0), "cm")) +
+  theme(axis.text.y = element_text(margin = margin(0, 0.7, 0, 0, "cm"))) +
   labs(y = "Population (millions)")
 
-grid.arrange(p.ghg.converted, p.population,
+grid.arrange(p.ghg, p.population,
              heights = c(.75, .25), ncol = 1, nrow = 2)
 
 

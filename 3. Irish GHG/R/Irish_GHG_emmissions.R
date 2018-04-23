@@ -67,7 +67,8 @@ p.ghg
 
 enriched.ghg <- 
   clean.ghg.data %>% 
-  left_join(irish.population, by = "Year")
+  left_join(irish.population, by = "Year") %>% 
+  mutate(Year = as.numeric(Year))
   
 # Plot Combined Plot
 
@@ -86,56 +87,55 @@ p.population <-
 grid.arrange(p.ghg, p.population,
              heights = c(.75, .25), ncol = 1, nrow = 2)
 
-
-
-# Read in the GNI figures
+# Read in the GNP figures (N1605 - statbank code)
 irish.gni <- 
-  read.csv("Data_Extract_From_World_Development_Indicators_Data.csv")  
+  read.csv("./data/ireland_gdp_gnp.csv")  
  
-gni.vector <- t(irish.gni)[5:17]
+enriched.ghg <-
+  enriched.ghg %>% 
+  left_join(irish.gni, by = c("Year" = "year")) %>% 
+  mutate(gnp.per.capita = gnp / population, 
+         gdp.per.capita = gdp / population,
+         ghg.emissions.per.capita = co2.equivalent / population)
 
-converted.ghg.data$gni <- gni.vector
-
-converted.ghg.data %<>% 
-  mutate(gni = as.numeric(gni)) %>% 
-  mutate(gni.per.capita = gni/ population)
-  
 # Get GNI per Capita and GHG per Capita plots
 p.gni <-
-  ggplot(converted.ghg.data, aes(Year, gni.per.capita)) +
-  geom_line(size = 1.5) +
-  test.theme +
-  scale_x_continuous(breaks = c(2000, 2004, 2008, 2012)) +
-  labs(title = "Irish Gross National Income per Capita (2000 - 2012)",
-       y = "GNI Per Capita ($)")
+  ggplot(enriched.ghg, aes(Year, gnp.per.capita)) +
+  geom_line(size = 1.2) +
+  theme_minimal() +
+  scale_x_continuous(breaks = c(2000, 2004, 2008, 2012, 2015)) +
+  labs(title = "Irish Gross National Product per Capita (2000 - 2015)",
+       y = "GNI Per Capita (€'000,000)")
 
 p.ghg.per.capita <-
-  ggplot(filter(converted.ghg.data, category.short.names == "Total GHG's"), 
-                aes(Year, ghg.emmissions.per.capita)) +
+  ggplot(filter(enriched.ghg, statistic.short == "TOTAL", 
+                `Sector NACE Rev 2` == "Total emissions"), 
+                aes(Year, ghg.emissions.per.capita)) +
   geom_line(size = 1.5, colour = blog_palette[6]) +
-  test.theme +
-  scale_x_continuous(breaks = c(2000, 2004, 2008, 2012)) +
-  theme(axis.ticks.margin = unit(c(0, 0, 0.3, 0), "cm")) + # for lining up
-  labs(title = "Irish Total GHG Emmissions per Capita (2000 - 2012)",
-       y = "GNI Per Capita ($)")
+  theme_minimal() +
+  scale_x_continuous(breaks = c(2000, 2004, 2008, 2012, 2015)) +
+  theme(axis.text.y = element_text(margin = margin(0, 0.15, 0, 0, "cm"))) + # for lining up
+  labs(title = "Irish Total GHG Emissions per Capita (2000 - 2015)",
+       y = "GHG Emissions Per Capita ('000 Tonnes)")
 
 # Plot in vertical arrangement
 grid.arrange(p.gni, p.ghg.per.capita,
              heights = c(.5, .5), ncol = 1, nrow = 2)
 
-
 # Ratio of GHG's to GNI
-converted.ghg.data %<>% 
-  mutate(GHG.gni.ratio = (Total.emissions * 1000) / gni,
-         gni.GHG.ratio = gni / (Total.emissions * 1000))
+enriched.ghg <-
+  enriched.ghg %>% 
+  mutate(ghg.gnp.ratio = (co2.equivalent * 1000) / gnp,
+         gnp.ghg.ratio = gnp / (co2.equivalent * 1000))
 
-ggplot(converted.ghg.data, aes(Year, GHG.gni.ratio, 
-                               colour = category.short.names)) +
-  geom_line(size = 1.5) +
-  test.theme +
+ggplot((enriched.ghg %>% filter(`Sector NACE Rev 2` == "Total emissions")), 
+       aes(Year, ghg.gnp.ratio, 
+           group = statistic.short, colour = statistic.short)) +
+  geom_line(size = 1.2) +
+  theme_minimal() +
   scale_color_manual(values = blog_palette, name = "GHG Type") +
-  scale_x_continuous(breaks = c(2000, 2004, 2008, 2012)) +
-  labs(title = "Irish Ratio of GHG Equivalent to GNI 2000 - 2012",
-       y = "Ratio of GHG Equivalent to GNI (tons per dollar)") +
+  scale_x_continuous(breaks = c(2000, 2005, 2010, 2015)) +
+  labs(title = "Irish Ratio of GHG Equivalent to GNP 2000 - 2015",
+       y = "Ratio of GHG Equivalent to GNP (tonnes per million Euro)") +
   theme(legend.position = "top") +
   scale_y_continuous(labels = comma)

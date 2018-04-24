@@ -14,6 +14,10 @@ library(grid)
 library(scales)
 library(datakindr) # github/cormac85/datakindr
 
+if(!interactive()){
+  setwd("../")
+}
+
 # Import
 raw.ghg.data <- datakindr::get_cso_dataset("EAA09")
 irish.population <- datakindr::get_cso_dataset("PEA11")

@@ -1,0 +1,71 @@
+---
+title: "Generic Analysis Template"
+author: "Cormac Nolan"
+output: 
+  html_document:
+    code_folding: "hide"
+    includes: 
+      after_body: footer.html
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Blah
+```{r libraries, message = FALSE, warning = FALSE}
+library(tidyverse)
+
+```
+
+```{r functions}
+
+```
+
+```{r import}
+
+```
+
+```{r raw exploration}
+plot(mtcars)
+```
+
+```{r clean 1}
+
+```
+
+```{r clean 2}
+
+```
+
+```{r exploration 1}
+
+```
+
+```{r exploration 2}
+
+```
+
+```{r exploration 3}
+
+```
+
+```{r summary}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```

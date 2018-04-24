@@ -1,17 +1,21 @@
 ---
 title: "Generic Analysis Template"
-author: "Cormac Nolan"
+author: "by [Cormac Nolan](https://github.com/cormac85/) - `r format(Sys.time(), '%d %B %Y')`"
 output: 
   html_document:
     code_folding: "hide"
+    css: style.css
     includes: 
       after_body: footer.html
+      in_header: header.html
 ---
 
+# Template {.tabset .tabset-fade .tabset-pills}
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+## Introduction
 Blah
 ```{r libraries, message = FALSE, warning = FALSE}
 
@@ -27,7 +31,7 @@ Blah
 
 ```
 
-
+## Cleaning
 ```{r raw exploration}
 
 ```
@@ -42,7 +46,7 @@ Blah
 
 ```
 
-
+## Exploration
 ```{r exploration 1}
 
 ```

@@ -1,0 +1,105 @@
+---
+title: "Renewables v Primary Energy Growth"
+author: "by [Cormac Nolan](https://github.com/cormac85/) - `r format(Sys.time(), '%d %B %Y')`"
+output: 
+  html_document:
+    code_folding: "hide"
+    css: style.css
+    includes: 
+      after_body: footer.html
+      in_header: header.html
+editor_options: 
+  chunk_output_type: console
+---
+
+# Introduction {.tabset .tabset-fade .tabset-pills}
+> If the world is going to reduce green house gas (GHG) emissions over the coming decades by way of the current strategy of massively building out new renewables, then one thing has to happen or it will be all for nought. The rate of growth of new renewables must be greater than the growth in primary energy consumption. The alternative is self-explantory. This analysis is an attempt to answer that question, is the growth in new renewables usage greater than the growth in primary energy consumption.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+if(!interactive()){
+  setwd("../")
+}
+
+```
+
+## Setup
+Blah
+```{r libraries, message = FALSE, warning = FALSE}
+library(tidyverse)
+
+```
+
+
+```{r functions}
+
+```
+
+
+```{r import}
+primary_energy <-
+  readr::read_tsv("./data/primary_energy_draft.tsv") %>% 
+  select(country:X58) %>% 
+  %>% View()
+  gather("year", "million_tonnes_equivalent", `1960`:`2016`)
+
+```
+
+## Cleaning
+```{r raw exploration}
+primary_energy %>% 
+  filter(country %in% c("United States", "China", "India")) %>% 
+  ggplot(aes(year, million_tonnes_equivalent, fill = country)) +
+  geom_bar(stat = "identity")
+```
+
+
+```{r clean 1}
+
+```
+
+
+```{r clean 2}
+
+```
+
+## Exploration
+```{r exploration 1}
+
+```
+
+
+```{r exploration 2}
+
+```
+
+
+```{r exploration 3}
+
+```
+
+
+```{r summary}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```

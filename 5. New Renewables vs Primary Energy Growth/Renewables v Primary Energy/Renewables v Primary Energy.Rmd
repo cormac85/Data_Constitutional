@@ -42,7 +42,7 @@ Renewable energy data retrieved from the [OECD here](https://data.oecd.org/energ
 
 ```{r import & clean 1}
 primary_energy <-
-  readr::read_csv("./data/primary_energy.csv") %>% 
+  readr::read_csv("./data/raw/primary_energy.csv") %>% 
   rename_all(clean_names) %>% 
   select(-flag_codes, -frequency, -subject, -indicator) %>% 
   filter(measure == "MLN_TOE",
@@ -51,26 +51,26 @@ primary_energy <-
          million_tonnes_equivalent = value) %>% 
   select(-measure) 
 
-country_codes <- 
-  maps::iso3166 %>% select(a3, ISOname) %>% rename(country = ISOname)
+country_codes <- read_csv("./data/raw/world_country_codes.csv")
 
 primary_energy_clean <-
   primary_energy %>% 
   filter(year %in% 1990:2015) %>% 
-  left_join(country_codes, by = c("country_iso3" = "a3"))
+  left_join(country_codes, by = c("country_iso3" = "a3_code")) %>% 
+  select(-a2_code, -num_code)
   
 ```
 
 We have similar issues to above in regards cleaning. If we look at the number of categories we can see most are redundant in this slice of the database we are importing. 
 ````{r import & clean 2}
 renewable_energy <-
-  readr::read_csv("./data/renewable_primary_energy.csv") %>% 
+  readr::read_csv("./data/raw/renewable_primary_energy.csv") %>% 
   rename_all(clean_names) 
 
 renewable_energy %>% select_if(is.character) %>% map(unique)
 ```
 
-So we don't want aggregate countries like `G20` and `EU28` etc. We're only intrested in the absolute value, in this case kilo-tonnes of equivalent, and the `L` lable seems to only denote missing data which we can identify easily with `NA`'s. `Frequency`, `subject`. `indicator`, `flag_codes` and `measure` are all now redundant.
+So we don't want aggregate countries like `G20` and `EU28` etc. We're only intrested in the absolute value, in this case kilo-tonnes of equivalent. The `L` lable seems to only denote missing data which we can identify easily with `NA`'s. `frequency`, `subject`. `indicator`, `flag_codes` and `measure` are all now redundant.
 ```{r import & clean 3}
 renewable_energy <-
   renewable_energy %>% 
@@ -85,13 +85,19 @@ renewable_energy <-
 renewable_energy_clean<-
   renewable_energy %>% 
   filter(year %in% 1990:2015) %>% 
-  left_join(country_codes, by = c("country_iso3" = "a3"))
+  left_join(country_codes, by = c("country_iso3" = "a3_code")) %>% 
+  select(-a2_code, -num_code)
 
 ```
 
 Thankfully the people at the OECD seem to have used the ISO 3-letter standard names for the countries, so we have no missing country names.
+```{r}
+renewable_energy_clean %>% select(country) %>% is.na() %>%
+  table() %>% as_tibble() %>%  knitr::kable(caption = "Is country NA?")
+```
 
 ## Exploration
+### Total Primary Energy
 Plotting all the data we can see some countries only have data for recent years.
 ```{r exploration 1, fig.cap="There appears to be some missing countries before 1990 and again 1971. 2016 is also incomplete"}
 primary_energy %>% 
@@ -120,7 +126,27 @@ primary_energy_clean %>%
   unique() %>% knitr::kable(caption = "Countries with missing data between 1990 - 2015")
 ```
 
+### Renewables Primary Energy
+```{r exploration 3}
+renewable_energy %>% 
+  ggplot(aes(year, million_tonnes_equivalent, fill = country_iso3)) +
+  geom_bar(stat = "identity") +
+  blorg::blog_theme +
+  theme(legend.position = "none")
+
+is.na(renewable_energy$million_tonnes_equivalent) %>% table() %>%
+  knitr::kable(caption = "Missing Data From Entire Dataset")
+is.na(renewable_energy_clean$million_tonnes_equivalent) %>% table() %>% 
+  knitr::kable(caption = "Missing Data From 1990 Onwards")
+
+renewable_energy_clean %>% 
+  filter(is.na(million_tonnes_equivalent)) %>% select(country) %>% 
+  unique() %>% knitr::kable(caption = "Countries with missing data between 1990 - 2015")
+```
+
+
 ## Enriched Data & Further Exploration
+Combining the total primary energy and renewables primary energy datasets we can then calculated the growth and absolute growth in order to make comparisons between how renewables are fairing versus the overall picture.
 ```{r enrichment}
 primary_energy_enriched <-
   primary_energy_clean %>% 
@@ -129,22 +155,49 @@ primary_energy_enriched <-
                select(year, country, million_tonnes_equivalent)), 
             by = c("country", "year")) %>% 
   rename(renewables_mtoe = million_tonnes_equivalent) %>% 
-  select(-country_iso3)
+  select(-country_iso3) %>% 
+  gather(energy_source, mtoe, total_mtoe, renewables_mtoe)
 
 # Anything with "mtoe" in title will have growth calculated.
 # Adding more primary energy sources to dataset should "just work"
 primary_energy_enriched <-
   primary_energy_enriched %>%
-  group_by(country) %>% 
+  group_by(country, energy_source) %>% 
   mutate_at(vars(contains("mtoe")), 
             funs(growth = growth, abs_growth = abs_growth)) %>% 
-  filter(year != 1990) %>% 
-  ungroup()
+  ungroup() 
 
+saveRDS(primary_energy_enriched,
+        "./data/processed/primary_energy_enriched.rds")
 ```
 
 
-```{r}
+```{r explore enriched}
+sum_growth <- function(x){ sum(growth(x), na.rm = TRUE) }
+sum_abs_growth <- function(x){ sum(abs_growth(x), na.rm = TRUE) }
+my_sum <- function(x){ sum(x, na.rm = TRUE)}
+yearly_energy_summary <-
+  primary_energy_enriched %>% 
+  filter(year != 1990) %>% 
+  group_by(year, energy_source) %>% 
+  summarise_at(vars(contains("mtoe")), 
+               funs(growth = sum_growth, abs_growth = sum_abs_growth,
+                    total_mtoe = my_sum))
+
+primary_energy_enriched %>% 
+#  filter(year != 1990) %>% 
+   group_by(year, energy_source) %>% 
+   summarise_at(vars(contains("mtoe")), 
+                funs(growth = sum(growth, na.rm = TRUE), 
+                     abs_growth = sum(abs_growth, na.rm = TRUE),
+                     total_mtoe = my_sum)) %>% View()
+
+primary_energy_enriched %>% filter(energy_source == "renewables_mtoe",
+                                   year %in% 1991:1992) %>% View
+
+primary_energy_clean %>% filter(year %in% 1991:1992) %>% View
+primary_energy %>% filter(year %in% 1991:1992) %>% View
+yearly_energy_summary %>% glimpse()
 
 ```
 

@@ -51,13 +51,14 @@ primary_energy <-
          million_tonnes_equivalent = value) %>% 
   select(-measure) 
 
-country_codes <- read_csv("./data/raw/world_country_codes.csv")
+country_codes <- readxl::read_excel("./data/raw/world_country_codes.xls")
 
 primary_energy_clean <-
   primary_energy %>% 
   filter(year %in% 1990:2015) %>% 
-  left_join(country_codes, by = c("country_iso3" = "a3_code")) %>% 
-  select(-a2_code, -num_code)
+  left_join(country_codes, by = c("country_iso3" = "CODE")) %>% 
+  select(-X__1, -X__2) %>% 
+  rename(country = Country)
   
 ```
 
@@ -85,8 +86,9 @@ renewable_energy <-
 renewable_energy_clean<-
   renewable_energy %>% 
   filter(year %in% 1990:2015) %>% 
-  left_join(country_codes, by = c("country_iso3" = "a3_code")) %>% 
-  select(-a2_code, -num_code)
+  left_join(country_codes, by = c("country_iso3" = "CODE")) %>% 
+  select(-X__1, -X__2) %>% 
+  rename(country = Country)
 
 ```
 
@@ -193,10 +195,10 @@ primary_energy_enriched %>%
                      total_mtoe = my_sum)) %>% View()
 
 primary_energy_enriched %>% filter(energy_source == "renewables_mtoe",
-                                   year %in% 1991:1992) %>% View
+                                   year %in% 1991:1992) 
 
-primary_energy_clean %>% filter(year %in% 1991:1992) %>% View
-primary_energy %>% filter(year %in% 1991:1992) %>% View
+primary_energy_clean %>% filter(year %in% 1991:1992) 
+primary_energy %>% filter(year %in% 1991:1992) 
 yearly_energy_summary %>% glimpse()
 
 ```

@@ -51,14 +51,17 @@ primary_energy <-
          million_tonnes_equivalent = value) %>% 
   select(-measure) 
 
-country_codes <- readxl::read_excel("./data/raw/world_country_codes.xls")
+# Country codes retrieved from: http://www.oecd.org/migration/mig/34107835.xls
+country_codes <- readr::read_csv("https://raw.githubusercontent.com/lukes/ISO-3166-Countries-with-Regional-Codes/master/all/all.csv") %>% 
+  rename(alpha_3 = `alpha-3`) %>% 
+  select(name, alpha_3)
+  
 
 primary_energy_clean <-
   primary_energy %>% 
   filter(year %in% 1990:2015) %>% 
-  left_join(country_codes, by = c("country_iso3" = "CODE")) %>% 
-  select(-X__1, -X__2) %>% 
-  rename(country = Country)
+  left_join(country_codes, by = c("country_iso3" = "alpha_3")) %>% 
+  rename(country = name)
   
 ```
 
@@ -86,9 +89,8 @@ renewable_energy <-
 renewable_energy_clean<-
   renewable_energy %>% 
   filter(year %in% 1990:2015) %>% 
-  left_join(country_codes, by = c("country_iso3" = "CODE")) %>% 
-  select(-X__1, -X__2) %>% 
-  rename(country = Country)
+  left_join(country_codes, by = c("country_iso3" = "alpha_3")) %>% 
+  rename(country = name)
 
 ```
 
@@ -178,42 +180,55 @@ saveRDS(primary_energy_enriched,
 sum_growth <- function(x){ sum(growth(x), na.rm = TRUE) }
 sum_abs_growth <- function(x){ sum(abs_growth(x), na.rm = TRUE) }
 my_sum <- function(x){ sum(x, na.rm = TRUE)}
+
 yearly_energy_summary <-
   primary_energy_enriched %>% 
   filter(year != 1990) %>% 
-  group_by(year, energy_source) %>% 
-  summarise_at(vars(contains("mtoe")), 
-               funs(growth = sum_growth, abs_growth = sum_abs_growth,
-                    total_mtoe = my_sum))
-
-primary_energy_enriched %>% 
-#  filter(year != 1990) %>% 
    group_by(year, energy_source) %>% 
    summarise_at(vars(contains("mtoe")), 
                 funs(growth = sum(growth, na.rm = TRUE), 
                      abs_growth = sum(abs_growth, na.rm = TRUE),
-                     total_mtoe = my_sum)) %>% View()
+                     total_mtoe = my_sum)) 
 
-primary_energy_enriched %>% filter(energy_source == "renewables_mtoe",
-                                   year %in% 1991:1992) 
-
-primary_energy_clean %>% filter(year %in% 1991:1992) 
-primary_energy %>% filter(year %in% 1991:1992) 
 yearly_energy_summary %>% glimpse()
 
 ```
 
-
+And it seems we are not fairing very well, although renewables is increasing the total primary energy is still way ahead and growing at a similar rate. At least up until 2015. You also have to remember that the "renewables" name in this case also includes (tragically in my opinion) biomass primary energy. We'll look at that afterwards.
 ```{r}
-
+yearly_energy_summary %>% 
+  ggplot(aes(year, total_mtoe, group = energy_source, 
+             colour = energy_source)) +
+  geom_line(size = 1.2) +
+  blorg::blog_theme +
+  scale_color_manual(values = blorg::blog_palette)
 ```
 
-
+Rarely does the renewables growth eclipse the total growth, although it is improving in more recent years.
 ```{r}
-
+yearly_energy_summary %>% 
+  ggplot(aes(year, abs_growth, group = energy_source, 
+             colour = energy_source)) +
+  geom_line(size = 1.2) +
+  blorg::blog_theme +
+  scale_color_manual(values = blorg::blog_palette)
 ```
 
-
+## Renewable Definition Problems
+As I mentioned previously, the drawback with the way the OECD calculates renewable primary energy, is that it includes biomass which really skews the measure. Let's look at the countries with the most renewable primary energy as a proportion of their total.
 ```{r}
-
+primary_energy_enriched %>% 
+  filter(year == 2015) %>% 
+  select(-growth, -abs_growth) %>%  
+  spread(energy_source, mtoe) %>% 
+  mutate(renewables_percentage = (100 * renewables_mtoe) / total_mtoe) %>% 
+  arrange(desc(renewables_percentage)) %>% 
+  top_n(10, renewables_percentage) %>% 
+  knitr::kable(caption = "Primary Renewable Energy as % of Total Primary Energy")
 ```
+
+It's a complete mixed bag in regards impact on climate, Paraguay exports huge amounts of hydroelectric power, and Iceland does well because of geothermal energy while basket-case countries like the Congo and  not exactly great examples of sustainable growth. The use of renewables here, as defined by the OECD, is largely driven by poverty rather than any advancement in renewable technologies.
+
+## Conclusion
+I'm really very pessimistic after looking at this data. Even when we factor in the use of biomass in renewables, which I would consider a dirty energy source, it seems renewables are not catching up with total primary energy (at least up to 2015). Unless things change very quickly, and exponential effects take over (as Elon Must often proposes) we are not going to switch our economies to sustainable energy production in any sort of acceptable timescale by way of "new renewable" technolgoies. 
+

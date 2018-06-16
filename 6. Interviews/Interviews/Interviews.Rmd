@@ -1,0 +1,179 @@
+---
+title: "Yet Another Interview Analysis"
+author: "by [Cormac Nolan](https://github.com/cormac85/) - `r format(Sys.time(), '%d %B %Y')`"
+output: 
+  html_document:
+    code_folding: "hide"
+    css: style.css
+    includes: 
+      after_body: footer.html
+      in_header: header.html
+editor_options: 
+  chunk_output_type: console
+---
+
+# Template {.tabset .tabset-fade .tabset-pills}
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+Looking at my journey to being hired by LinkedIn, using some less traditional visualisation methods, though hardly breaking the mold here!
+```{r libraries, message = FALSE, warning = FALSE}
+library(tidyverse)
+```
+
+
+```{r functions}
+clean_names <- function(x) str_replace_all(tolower(x), " ", "_")
+
+kable_tally <- function(data, variable, cap = "") {
+  data %>% group_by_(variable) %>% tally %>% arrange(desc(n)) %>% 
+    knitr::kable(caption = cap, format = "html") %>% 
+    kableExtra::kable_styling(full_width = FALSE)
+}
+
+count_words <- function(word, corpus) sum(str_count(corpus, word), na.rm = TRUE)
+
+count_exact_words <- function(word, corpus) sum(corpus %in% word, na.rm = TRUE)
+```
+
+The data was generated manually in a Google Sheet as I was tracking all the applications I made over the course of several months.
+```{r import}
+if(!interactive()){
+  setwd("..")
+}
+
+interviews_raw <- readxl::read_excel("data/job_search_list.xlsx") %>% 
+  select(-Email, -Contact, -Phone) 
+
+colnames(interviews_raw) <- 
+  colnames(interviews_raw) %>%
+  clean_names
+  
+```
+
+## Cleaning
+
+```{r raw exploration}
+summary(interviews_raw %>% 
+          mutate_at(c("status", "stage_reached", "contact_gender"), as.factor))
+
+glimpse(interviews_raw)
+```
+
+A few things come up from the initial summary:
+
+* Inconsistent formatting of factor levels.
+* `key_phrases` is really a character vector and should be nested.
+* `salary` uses inconsistent factor levels.
+* `contact_gender` should use `NA` for missing values.
+
+```{r clean 1}
+
+interviews_clean <-
+  interviews_raw %>% 
+  mutate_at(c("stage_reached"), toupper) %>% 
+  mutate(salary = ifelse(salary == "?", NA, salary))
+
+interviews_clean$key_phrases <-
+  (str_split(interviews_raw$key_phrases, ",") %>% 
+  map(str_trim) %>% 
+  map(clean_names))
+```
+
+## Exploration
+Titles were mostly data analytics roles.
+```{r exploration 1}
+interviews_clean %>% kable_tally("job_title", "Job Title Tally")
+```
+
+Mostly even split between explicit rejection and applications where I recieved no reply. "INCOMPATIBLE" means I didn't meet the requirements for the position.
+```{r exploration 2}
+interviews_clean %>% 
+  kable_tally("status", "Application Status Tally") %>% 
+  kableExtra::row_spec(4, bold = T, color = "white", background = "green")
+
+```
+
+
+```{r exploration 3}
+interviews_clean %>% 
+  mutate(month = format(applied_date, "%B")) %>% 
+  group_by(month) %>% tally() %>% 
+  knitr::kable() %>% 
+  kableExtra::kable_styling(full_width = FALSE)
+
+```
+
+## Analysis
+Sankey (or alluvial) plot of how far I got in each round and the ultimate result of the application.
+```{r sankey plot}
+stage_levels <- c("FINAL ROUND", "2ND ROUND", "1ST ROUND", "LATE", "NONE")
+status_levels <- c("ACCEPTED", "REJECTED", "INCOMPATIBLE", "NOREPLY",
+                   "CONTACTED","APPLIED" )
+
+interviews_clean %>% group_by(status, stage_reached) %>% tally() %>% 
+  ungroup() %>% 
+  mutate(stage_reached = factor(stage_reached, levels = stage_levels)) %>% 
+  ggplot(aes(weight = n, axis1 = stage_reached, 
+             axis2 = status, fill = status)) +
+  ggalluvial::geom_alluvium( width = 1/12) +
+  ggalluvial::geom_stratum(width = 1/12, fill = "white", color = "grey") +
+  annotate("text", x = 1, y = c(21.5, 20, 18, 16.5, 8), label = stage_levels,
+           size = 3) +
+  scale_x_continuous(breaks = c(1, 2), labels = c("Round Reached", "Status")) +
+  theme_void() +
+  ggtitle("Round Reached vs Status of Application") +
+  scale_fill_brewer(palette = "Dark2")
+```
+
+A simple timeline of when I applied for each position.
+```{r timeline, fig.height=1.5, fig.width=8}
+successful_application_date <-
+  interviews_clean$applied_date[interviews_clean$company == "LinkedIn (CPL)"]
+
+interviews_clean %>% 
+  ggplot(aes(x = applied_date, y = 0, colour = status)) +
+  geom_abline(slope = 0, intercept = 0) + 
+  geom_point(size = 2) + 
+  theme_minimal() +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        panel.grid = element_blank(),
+        axis.text.x = element_text())+
+  scale_colour_brewer(palette = "Dark2")
+  
+
+
+```
+
+When looking at repetitions of keywords the answers aren't that surprising. Entry level positions are focussed on data sourcing, cleaning and visualisation so there are tools repeatedly mentioned that are good for these tasks. Ability to communicate effectively is also a very highly prized skill, we need to be able to tell people what insights we've found!
+
+```{r Keywords analysis 1}
+key_words <- unlist(interviews_clean$key_phrases)
+
+word_count <-
+  data.frame(word = unique(key_words),
+  n = map_int(unique(key_words), count_words, key_words)) %>% 
+  arrange(desc(n))
+
+word_count_exact <-
+  data.frame(word = unique(key_words),
+  n = map_int(unique(key_words), count_exact_words, key_words)) %>% 
+  arrange(desc(n))
+
+word_count_exact %>% top_n(7) %>% 
+  knitr::kable(caption = "Top 7 Key Words") %>% 
+  kableExtra::kable_styling(full_width = FALSE)
+```
+
+If we go further down the list we find stuff like `r` and, `bi` (business intelligence), `SAS`, `SAP`, `SCALA` etc. So apparently if you want a job in data analytics in Ireland in 2018, you should probably be learning SQL, Excel, Tableau and Python. The other tools and languages are probably more of a "nice to have" than anything.
+
+## Conclusions
+
+* A lot of recruiters will tell you if you've been rejected, at the same time a lot *won't*.
+* Finding your first job in a field can take a long time.
+* You should probably learn SQL, Excel, Tableau and Python if you want a data analytics job.
+

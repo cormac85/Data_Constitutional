@@ -1,0 +1,97 @@
+---
+title: "Gaming Company Stock Prices"
+author: "Cormac Nolan"
+date: "6 February 2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo = FALSE, message=FALSE, warning = FALSE}
+library(dplyr)
+library(ggplot2)
+library(purrr)
+library(quantmod)
+```
+
+```{r functions}
+add_stocks <- function(df, ticker_var, start_date, end_date, data_source = "yahoo") {
+  ticker_q = dplyr::enquo(ticker_var)
+  mutate(df, 
+         stocks = map(!! ticker_q, 
+                      function(x, y, z) getSymbols(x, src = data_source, 
+                                                   from = y, to = z, 
+                                                   auto.assign = FALSE),
+                      start_date, end_date))
+}
+
+extract_xts <- function(xts_obj, ticker_name, metric) {
+  xts_column = paste0(ticker_name, ".", metric)
+  result <- 
+    xts_obj[ , xts_column] %>% 
+    as.data.frame() %>% 
+    tibble::rownames_to_column(var = "stock_date") %>% 
+    as_tibble() %>% 
+    mutate(stock_date = as.Date(stock_date))
+  
+  result
+}
+
+remove_pattern_from_colnames <- function(df, pattern) {
+  colnames(df) = stringr::str_replace(colnames(df), pattern, "")
+  df
+}
+```
+
+```{r, cache = TRUE}
+gaming_stock_tickers <- c("EA", "ATVI", "NTDOY", "NVDA")
+gaming_and_casino_stock_tickers <- c("MGM", "LVS", "MLCO", "WYNN")
+
+analysis_dates <- list(start = as.Date("2016-01-01"), end = as.Date(Sys.Date()))
+
+
+gaming_stocks_raw <-
+  tibble(tickers = gaming_stock_tickers) %>% 
+  add_stocks(tickers, analysis_dates$start, analysis_dates$end)
+
+casino_stocks_raw <-
+  tibble(tickers = gaming_and_casino_stock_tickers) %>% 
+  add_stocks(tickers, analysis_dates$start, analysis_dates$end)
+
+```
+
+```{r}
+
+gaming_stocks <-
+  gaming_stocks_raw %>% 
+  mutate(closing = map2(stocks, tickers, 
+                        function(stk, tck, var_name) extract_xts(stk, tck, var_name), "Close")) %>% 
+  mutate(closing = map2(closing, tickers, 
+                        function(cls, tck) remove_pattern_from_colnames(cls, paste0(tck, "\\."))))
+
+map2(gaming_stocks$closing, gaming_stocks$tickers, 
+     function(x, y) qplot(stock_date, Close,  data = x, geom = "line", main = y))
+  
+```
+
+
+```{r}
+gaming_stocks_normalised <-
+  gaming_stocks %>% 
+  mutate(closing_normalised = map(closing, function(df) { df$Close <- df$Close / max(df$Close) ; df }))
+
+gaming_stocks_normalised$closing_normalised
+
+multi_join = function(df_list, by) {
+  df_list[[1]] %>% 
+    left_join(df_list[2])
+}
+
+cor(gaming_stocks_normalised$closing_normalised[[1]]$Close,
+    gaming_stocks_normalised$closing_normalised[[2]]$Close)
+
+```

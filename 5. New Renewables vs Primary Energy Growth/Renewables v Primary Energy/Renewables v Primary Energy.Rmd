@@ -28,12 +28,16 @@ if(!interactive()){
 Blah
 ```{r libraries, message = FALSE, warning = FALSE}
 library(tidyverse)
+library(broom)
 
 ```
 
 
 ```{r functions}
 growth <- function(x) {(x / lag(x)) - 1}
+# Replacing non finite growth values with 0, 0 is a close enough approximate 
+# when summing. Mean/medians are not being used here.
+safe_growth <- function(x) {ifelse(is.finite(growth(x)), growth(x), 0)}
 abs_growth <- function(x) {x - lag(x)}
 clean_names <- function(x) {tolower(stringr::str_replace(x, " ", "_"))}
 ```
@@ -164,54 +168,110 @@ primary_energy_enriched <-
   primary_energy_enriched %>%
   group_by(country, energy_source) %>% 
   mutate_at(vars(contains("mtoe")), 
-            funs(growth = growth, abs_growth = abs_growth)) %>% 
+            funs(growth = safe_growth, abs_growth = abs_growth)) %>% 
   ungroup() 
 
 saveRDS(primary_energy_enriched,
         "./data/processed/primary_energy_enriched.rds")
 ```
 
-
-```{r explore enriched}
-sum_growth <- function(x){ sum(growth(x), na.rm = TRUE) }
-sum_abs_growth <- function(x){ sum(abs_growth(x), na.rm = TRUE) }
-my_sum <- function(x){ sum(x, na.rm = TRUE)}
+We'll calculate a yearly world summary here.
+```{r enriched yearly summary}
 yearly_energy_summary <-
   primary_energy_enriched %>% 
-  filter(year != 1990) %>% 
-  group_by(year, energy_source) %>% 
-  summarise_at(vars(contains("mtoe")), 
-               funs(growth = sum_growth, abs_growth = sum_abs_growth,
-                    total_mtoe = my_sum))
-
-primary_energy_enriched %>% 
-#  filter(year != 1990) %>% 
    group_by(year, energy_source) %>% 
    summarise_at(vars(contains("mtoe")), 
-                funs(growth = sum(growth, na.rm = TRUE), 
-                     abs_growth = sum(abs_growth, na.rm = TRUE),
-                     total_mtoe = my_sum)) %>% View()
+                funs(abs_growth = sum(abs_growth, na.rm = TRUE),
+                     total_mtoe = sum(mtoe, na.rm = TRUE))) %>% 
+  ungroup() %>% 
+  group_by(energy_source) %>%  
+  # Calculate growth % AFTER absolute growth calculated
+  mutate(growth = safe_growth(total_mtoe)) %>% 
+  ungroup()
 
-primary_energy_enriched %>% filter(energy_source == "renewables_mtoe",
-                                   year %in% 1991:1992) %>% View
+glimpse(yearly_energy_summary)
+```
 
-primary_energy_clean %>% filter(year %in% 1991:1992) %>% View
-primary_energy %>% filter(year %in% 1991:1992) %>% View
-yearly_energy_summary %>% glimpse()
+Plots of the yearly summary show some wild swings in growth over the period, with renewables growing more than total growth in some years in absolute terms, which is remarkable when you look at it in the context of the total MTOE figures.
+```{r plot yearly summary}
+
+plot_yearly_summary <- function(yearly_summary, plot_var){
+  
+  yearly_summary %>% 
+    ggplot(aes_(~year, as.name(plot_var), colour = ~energy_source, 
+               group = ~energy_source)) +
+    geom_line(size = 1) +
+    blorg::blog_theme +
+    scale_color_manual(values = blorg::blog_palette) 
+}
+
+plot_yearly_summary(yearly_energy_summary, "total_mtoe")
+plot_yearly_summary(yearly_energy_summary, "growth")
+plot_yearly_summary(yearly_energy_summary, "abs_growth")
+```
+
+We'll also create a country summary for the period 1990 - 2015.
+```{r country summary}
+country_energy_summary <-
+  primary_energy_enriched %>% 
+  group_by(country, energy_source) %>% 
+  summarise_at(vars(contains("mtoe")), 
+               funs(abs_growth = sum(abs_growth, na.rm = TRUE),
+                    growth_1990_2015 = 
+                      ifelse(is.finite(sum(abs_growth, na.rm = TRUE) /
+                                         first(mtoe)),
+                             sum(abs_growth, na.rm = TRUE) / first(mtoe),
+                             NA),
+                    mtoe_1990 = first,
+                    mtoe_2015 = last))
+```
+
+```{r country summary plot}
+
+plot_country_summary_abs_growth <- function(country_summary, plot_var){
+  
+  country_summary %>% 
+    ggplot(aes_(~forcats::fct_reorder(country, abs_growth),
+                as.name(plot_var), fill = ~energy_source, 
+               group = ~energy_source)) +
+    geom_bar(stat = "identity") +
+    blorg::blog_theme +
+    scale_fill_manual(values = blorg::blog_palette) +
+    facet_wrap(~energy_source, ncol = 1, scales = "free")
+}
+
+plot_country_summary_growth <- function(country_summary, plot_var){
+  
+  country_summary %>% 
+    ggplot(aes_(~forcats::fct_reorder(country, growth_1990_2015),
+                as.name(plot_var), fill = ~energy_source, 
+               group = ~energy_source)) +
+    geom_bar(stat = "identity") +
+    blorg::blog_theme +
+    scale_fill_manual(values = blorg::blog_palette) +
+    facet_wrap(~energy_source, ncol = 1, scales = "free")
+}
+
+plot_country_summary_abs_growth(country_energy_summary %>% ungroup() %>% 
+                       filter(energy_source == "total_mtoe") %>% 
+                       top_n(10, abs_growth), 
+                     "abs_growth")
+
+plot_country_summary_abs_growth(country_energy_summary %>% ungroup() %>% 
+                       filter(energy_source == "renewables_mtoe") %>% 
+                       top_n(10, abs_growth), 
+                     "abs_growth")
+
+plot_country_summary_growth(country_energy_summary %>% ungroup() %>% 
+                       filter(energy_source == "total_mtoe") %>% 
+                         top_n(10, growth_1990_2015),
+                       "growth_1990_2015")
 
 ```
 
-
 ```{r}
-
-```
-
-
-```{r}
-
-```
-
-
-```{r}
-
+saveRDS(yearly_energy_summary, 
+        "./data/processed/yearly_energy_summary.rds")
+saveRDS(country_energy_summary,
+        "./data/processed/country_energy_summary.rds")
 ```

@@ -16,7 +16,11 @@ library(dplyr)
 library(ggplot2)
 library(purrr)
 library(quantmod)
+library(tsibble)
+library(feasts)
 ```
+
+## Import and Setup
 
 ```{r functions}
 add_stocks <- function(df, ticker_var, start_date, end_date, data_source = "yahoo") {
@@ -47,9 +51,11 @@ remove_pattern_from_colnames <- function(df, pattern) {
 }
 ```
 
+Retrieve the stocks...
 ```{r, cache = TRUE}
 gaming_stock_tickers <- c("EA", "ATVI", "NTDOY", "NVDA")
 gaming_and_casino_stock_tickers <- c("MGM", "LVS", "MLCO", "WYNN")
+tech_stock_tickers <- c("MSFT", "AAPL", "GOOGL", "FB", "INTC", "CSCO", "TSM", "ORCL", "ADBE", "IBM")
 
 analysis_dates <- list(start = as.Date("2016-01-01"), end = as.Date(Sys.Date()))
 
@@ -62,8 +68,12 @@ casino_stocks_raw <-
   tibble(tickers = gaming_and_casino_stock_tickers) %>% 
   add_stocks(tickers, analysis_dates$start, analysis_dates$end)
 
+tech_stocks_raw <-
+  tibble(tickers = tech_stock_tickers) %>% 
+  add_stocks(tickers, analysis_dates$start, analysis_dates$end)
 ```
 
+Extract the closing stock price as a data frame.
 ```{r}
 
 gaming_stocks <-
@@ -73,25 +83,76 @@ gaming_stocks <-
   mutate(closing = map2(closing, tickers, 
                         function(cls, tck) remove_pattern_from_colnames(cls, paste0(tck, "\\."))))
 
-map2(gaming_stocks$closing, gaming_stocks$tickers, 
+tech_stocks <-
+  tech_stocks_raw %>% 
+  mutate(closing = map2(stocks, tickers, 
+                        function(stk, tck, var_name) extract_xts(stk, tck, var_name), "Close")) %>% 
+  mutate(closing = map2(closing, tickers, 
+                        function(cls, tck) remove_pattern_from_colnames(cls, paste0(tck, "\\."))))
+
+map2(tech_stocks$closing, tech_stocks$tickers, 
      function(x, y) qplot(stock_date, Close,  data = x, geom = "line", main = y))
   
 ```
 
-
+Normalise each stock agains the max price of the stock over the period.
 ```{r}
 gaming_stocks_normalised <-
   gaming_stocks %>% 
-  mutate(closing_normalised = map(closing, function(df) { df$Close <- df$Close / max(df$Close) ; df }))
+  mutate(closing_normalised = map(closing, function(df) { df$Close <- df$Close / max(df$Close) ; df })) %>% 
+  mutate(closing_normalised = map2(closing_normalised, tickers, function(x, y) mutate(x, ticker = y)))
 
-gaming_stocks_normalised$closing_normalised
+gaming_stocks_df <-
+  dplyr::bind_rows(gaming_stocks_normalised$closing_normalised) %>% 
+  spread(ticker, Close) %>% 
+  mutate(stock_mean = pmap_dbl(select(., -stock_date), .f = ~mean(c(...)))) %>% 
+  select(stock_date, stock_mean)
 
-multi_join = function(df_list, by) {
-  df_list[[1]] %>% 
-    left_join(df_list[2])
-}
+gaming_stocks_normalised %>% 
+  mutate(closing_normalised = map(closing_normalised, 
+                                  function(x, y) left_join(x, y, by = c("stock_date")), 
+                                  gaming_stocks_df)) %>% 
+  mutate(correlation_to_mean = map_dbl(closing_normalised, function(x) cor(x$Close, x$stock_mean)))
 
-cor(gaming_stocks_normalised$closing_normalised[[1]]$Close,
-    gaming_stocks_normalised$closing_normalised[[2]]$Close)
+
+```
+
+
+```{r}
+gaming_stocks_normalised %>% 
+  select(closing_normalised) %>% 
+  pull() %>% 
+  bind_rows() %>% 
+  ggplot(aes(stock_date, Close, colour = ticker)) +
+  geom_smooth(se = FALSE, span = 0.2) +
+  geom_line(alpha = 0.3)
+```
+
+
+```{r}
+tech_stocks_normalised <-
+  tech_stocks %>%
+  mutate(closing_normalised = map(closing, function(df) { df$Close <- df$Close / max(df$Close) ; df })) %>% 
+  mutate(closing_normalised = map2(closing_normalised, tickers, function(x, y) mutate(x, ticker = y)))
+
+tech_stocks_normalised %>% 
+  select(-stocks, -closing) %>% 
+  unnest %>% 
+  group_by(stock_date) %>% 
+  summarise(mean_close = mean(Close)) %>% 
+  ggplot(aes(stock_date, mean_close)) +
+  geom_line()
+
+tech_stocks_mean <-
+  tech_stocks_normalised %>% 
+  select(-stocks, -closing) %>% 
+  unnest %>% 
+  group_by(stock_date) %>% 
+  summarise(mean_close = mean(Close))
+
+gaming_stocks_normalised$tech_mean <- rep(list(tech_stocks_mean), 4)
+
+gaming_stocks_normalised %>% 
+  map(tech_normalised = map2(closing_normalised, tech_mean))
 
 ```

@@ -137,7 +137,7 @@ tech_stocks_normalised <-
 
 tech_stocks_normalised %>% 
   select(-stocks, -closing) %>% 
-  unnest %>% 
+  unnest %>%
   group_by(stock_date) %>% 
   summarise(mean_close = mean(Close)) %>% 
   ggplot(aes(stock_date, mean_close)) +

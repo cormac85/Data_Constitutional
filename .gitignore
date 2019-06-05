@@ -25,6 +25,7 @@
 *.log
 *.sql
 *.sqlite
+*_cache
 
 # Data files #
 ##############
@@ -40,6 +41,7 @@
 *.pdf
 *.gif
 *.html
+.Rhistory
 
 
 # OS generated files #

@@ -8,17 +8,22 @@ output:
     includes: 
       after_body: footer.html
       in_header: header.html
+editor_options: 
+  chunk_output_type: console
 ---
 
 # Template {.tabset .tabset-fade .tabset-pills}
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(root.dir = '..')
+
 ```
 
 ## Introduction
-Blah
-```{r libraries, message = FALSE, warning = FALSE}
 
+```{r libraries, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(blorg)
 ```
 
 
@@ -28,17 +33,31 @@ Blah
 
 
 ```{r import}
-
+prices_raw <- read_csv("./data/uk_house_prices_2018.csv",
+                       col_names = c("id", "price", "transfer_date", "postcode", "property_type",
+                                     "old_or_new", "duration", "paon", "saon", "street", 
+                                     "locality", "town_or_city", "district", "county", 
+                                     "transaction_type", "record_status")) %>% 
 ```
 
 ## Cleaning
 ```{r raw exploration}
 
+prices_raw %>% 
+  select(property_type, old_or_new, duration, transaction_type, record_status) %>% 
+  mutate_all(as.factor) %>% 
+  summary()
+
 ```
 
 
 ```{r clean 1}
+prices <- 
+  prices_raw %>% 
+  select(-record_status, -id)
 
+rm(prices_raw)
+  
 ```
 
 
@@ -48,7 +67,19 @@ Blah
 
 ## Exploration
 ```{r exploration 1}
-
+prices %>% 
+  select(county, district, town_or_city) %>% 
+  map(function(x) length(unique(x))) %>% 
+  unlist() %>% 
+  bind_rows() %>% 
+  gather(key = geo_type, value = geo_count) %>% 
+  ggplot(aes(geo_type, geo_count, fill = geo_count)) + 
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  blorg::blog_theme +
+  scale_fill_gradient(low = blorg::blog_palette[2],
+                      high = blorg::blog_palette[1])
+  
 ```
 
 

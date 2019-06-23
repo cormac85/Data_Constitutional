@@ -1,5 +1,5 @@
 ---
-title: "Generic Analysis Template"
+title: "Property Transactions in England and Wales"
 author: "by [Cormac Nolan](https://github.com/cormac85/) - `r format(Sys.time(), '%d %B %Y')`"
 output: 
   html_document:
@@ -12,18 +12,20 @@ editor_options:
   chunk_output_type: console
 ---
 
-# Template {.tabset .tabset-fade .tabset-pills}
+# {.tabset .tabset-fade .tabset-pills}
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_chunk$set(root.dir = '..')
+# knitr::opts_chunk$set(root.dir = '../../')
 
 ```
 
 ## Introduction
+In this analysis I wanted to simply explore an interesting dataset I found on the UK open data website that details the price of every residential property transaction that happens in England and Wales. Details can be found [here.](https://www.gov.uk/guidance/about-the-price-paid-data) I'm hoping that upon going through this exploration that inspiration for a more complicated analysis might strike me. But for now, let's get digging!
 
 ```{r libraries, message = FALSE, warning = FALSE}
 library(tidyverse)
 library(blorg)
+library(knitr)
 ```
 
 
@@ -33,20 +35,28 @@ library(blorg)
 
 
 ```{r import}
-prices_raw <- read_csv("./data/uk_house_prices_2018.csv",
+# Column names were not in the raw file for some reason. 
+prices_raw <- read_csv("../data/uk_house_prices_2018.csv",
                        col_names = c("id", "price", "transfer_date", "postcode", "property_type",
                                      "old_or_new", "duration", "paon", "saon", "street", 
                                      "locality", "town_or_city", "district", "county", 
-                                     "transaction_type", "record_status")) %>% 
+                                     "transaction_type", "record_status"))
 ```
 
 ## Cleaning
+Taking an initial look at the factors in data we see the split is simple and that `record_status` is irrelevant in this case. A few things stand out to me:
+
+1. The volume of leasehold transactions is kind of astounding to me (`duration == 'L'`), it just seems like such an anachronism but it is a practice that is still alive and well in the UK.
+2. The vast majority (approx. 75%) of housing in the UK are actual houses of some sort (detached, semi-detached or terraced), or at least that's how it appears in the transactions, with flats / maisonettes quite a ways behind.
+3. The data quality is exceptional, perfectly [tidy data.](https://cran.r-project.org/web/packages/tidyr/vignettes/tidy-data.html)
+
 ```{r raw exploration}
 
 prices_raw %>% 
   select(property_type, old_or_new, duration, transaction_type, record_status) %>% 
   mutate_all(as.factor) %>% 
-  summary()
+  summary() %>% 
+  knitr::kable()
 
 ```
 
@@ -66,6 +76,10 @@ rm(prices_raw)
 ```
 
 ## Exploration
+So let's dig into some of the variables in more detail. 
+
+### Geographic Areas
+Firstly I noticed that there are many more geographic regions than I had anticipated, overy 100 counties and nearly 1200 towns or cities. If I want to create a choropleth or other map, things could get quite complicated. 
 ```{r exploration 1}
 prices %>% 
   select(county, district, town_or_city) %>% 
@@ -78,22 +92,62 @@ prices %>%
   coord_flip() +
   blorg::blog_theme +
   scale_fill_gradient(low = blorg::blog_palette[2],
-                      high = blorg::blog_palette[1])
+                      high = blorg::blog_palette[1]) +
+  labs(title = "Distinct Count of Different Geographic Areas",
+       subtitle = "England and Wales")
   
 ```
 
-
+### Price
+The price of each transaction is the probably the most interesting part of this dataset. First, let's look at some summary statistics across a few categorical variables.
 ```{r exploration 2}
 
-```
+prices %>% 
+  select(price, old_or_new, property_type) %>% 
+  group_by(old_or_new, property_type) %>% 
+  summarise(count_transactions = n(),
+            quantile_25 = quantile(price, probs = 0.25),
+            median_price = median(price),
+            quantile_75 = quantile(price, probs = 0.75),
+            mean_price = mean(price),
+            max_price = max(price)
+            ) %>% 
+  mutate(iqr = quantile_75 - quantile_25)
 
+```
+There are truly some eye-watering property prices here, with the highest at £569 million which was for the Park Lane Mews Hotel in Westminster. I'm assuming the 'O' category of `property_type` will typically refer to hotels and hostels...?
 
 ```{r exploration 3}
 
+filter(prices, price == max(price)) %>% knitr::kable()
+
 ```
 
+The largest transaction for a new property appears to be an apartment complex in Fulham at £62 million:
+```{r}
+filter(prices, old_or_new == 'Y') %>% 
+  filter(price == max(price)) %>% 
+  knitr::kable()
+```
 
-```{r summary}
+### Seasonality
+Looking at the transaction prices over time might show some interesting seasonality, but I think it will depend heavily on the category and what summary statistic we use. With single outlier transactions in the hundreds of millions of pounds, it seems wise to be careful here.
+```{r exploration 4}
+prices %>% 
+  mutate(month = format(transfer_date, "%m"),
+         year = format(transfer_date, "%Y")) %>% 
+  group_by(old_or_new, property_type, month) %>% 
+  summarise_at(vars(price), funs(median, mean)) %>%
+  # filter(old_or_new == "N", property_type == "D") %>% 
+  gather(statistic, price, median:mean) %>%
+  ggplot(aes(month, price, colour = statistic, group = statistic)) +
+  geom_line(size = 1) +
+  facet_grid(old_or_new ~ property_type) +
+  blorg::blog_theme +
+  scale_colour_manual(values = blorg::blog_palette) +
+  labs(title = "2018 Residential Property Transaction Prices by Property Type and Property Age",
+       subtitle = "England and Wales") +
+  scale_y_continuous(name = "Transaction Price (£)", labels = scales::comma)
 
 ```
 

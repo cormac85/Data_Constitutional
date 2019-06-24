@@ -15,7 +15,7 @@ editor_options:
 # {.tabset .tabset-fade .tabset-pills}
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-# knitr::opts_chunk$set(root.dir = '../../')
+knitr::opts_chunk$set(root.dir = '../../')
 
 ```
 
@@ -26,6 +26,10 @@ In this analysis I wanted to simply explore an interesting dataset I found on th
 library(tidyverse)
 library(blorg)
 library(knitr)
+library(tsibble)
+library(feasts)
+library(fable)
+
 ```
 
 
@@ -36,11 +40,16 @@ library(knitr)
 
 ```{r import}
 # Column names were not in the raw file for some reason. 
-prices_raw <- read_csv("../data/uk_house_prices_2018.csv",
+prices_raw <- read_csv("./data/uk_house_prices_2018.csv",
                        col_names = c("id", "price", "transfer_date", "postcode", "property_type",
                                      "old_or_new", "duration", "paon", "saon", "street", 
                                      "locality", "town_or_city", "district", "county", 
-                                     "transaction_type", "record_status"))
+                                     "transaction_type", "record_status")) %>% 
+  dplyr::union(read_csv("./data/uk_house_prices_2019.csv",
+                        col_names = c("id", "price", "transfer_date", "postcode", "property_type",
+                                      "old_or_new", "duration", "paon", "saon", "street", 
+                                      "locality", "town_or_city", "district", "county", 
+                                      "transaction_type", "record_status")))
 ```
 
 ## Cleaning
@@ -64,7 +73,7 @@ prices_raw %>%
 ```{r clean 1}
 prices <- 
   prices_raw %>% 
-  select(-record_status, -id)
+  select(-record_status)
 
 rm(prices_raw)
   
@@ -132,12 +141,12 @@ filter(prices, old_or_new == 'Y') %>%
 
 ### Seasonality
 Looking at the transaction prices over time might show some interesting seasonality, but I think it will depend heavily on the category and what summary statistic we use. With single outlier transactions in the hundreds of millions of pounds, it seems wise to be careful here.
-```{r exploration 4}
+```{r exploration 4, fig.width = 10, fig.height = 7}
 prices %>% 
-  mutate(month = format(transfer_date, "%m"),
+  mutate(month = format(transfer_date, "%Y%m"),
          year = format(transfer_date, "%Y")) %>% 
   group_by(old_or_new, property_type, month) %>% 
-  summarise_at(vars(price), funs(median, mean)) %>%
+  summarise_at(vars(price), list(~median(.), ~mean(.))) %>%
   # filter(old_or_new == "N", property_type == "D") %>% 
   gather(statistic, price, median:mean) %>%
   ggplot(aes(month, price, colour = statistic, group = statistic)) +
@@ -151,8 +160,18 @@ prices %>%
 
 ```
 
-
+Terraced housing is the largest group, so let's see if we can fit a timeseries decomposition to that subset of transactions.
 ```{r}
+terraced_ts <-
+  prices %>% 
+  filter(property_type == "T") %>% 
+  mutate(month = format(transfer_date, "%Y%m"),
+         year = format(transfer_date, "%Y")) %>% 
+  group_by(old_or_new, property_type, month) %>% 
+  summarise_at(vars(price), list(~median(.), ~mean(.))) %>%
+  gather(statistic, price, median:mean) %>% 
+  tsibble::as_tsibble(index = month)
+
 
 ```
 

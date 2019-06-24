@@ -44,11 +44,14 @@ if(!interactive()){
   setwd("..")
 }
 
-interviews_raw <- readxl::read_excel("data/job_search_list.xlsx") %>% 
+interviews_raw_2019 <- readxl::read_excel("data/job_search_list.xlsx", sheet = '2019') %>% 
   select(-Email, -Contact, -Phone) 
 
-colnames(interviews_raw) <- 
-  colnames(interviews_raw) %>%
+interviews_raw_2018 <- readxl::read_excel("data/job_search_list.xlsx", sheet = '2018') %>% 
+  select(-Email, -Contact, -Phone) 
+
+colnames(interviews_raw_2019) <- 
+  colnames(interviews_raw_2019) %>%
   clean_names
   
 ```
@@ -56,10 +59,10 @@ colnames(interviews_raw) <-
 ## Cleaning
 
 ```{r raw exploration}
-summary(interviews_raw %>% 
+summary(interviews_raw_2019 %>% 
           mutate_at(c("status", "stage_reached", "contact_gender"), as.factor))
 
-glimpse(interviews_raw)
+glimpse(interviews_raw_2019)
 ```
 
 A few things come up from the initial summary:
@@ -72,12 +75,12 @@ A few things come up from the initial summary:
 ```{r clean 1}
 
 interviews_clean <-
-  interviews_raw %>% 
+  interviews_raw_2019 %>% 
   mutate_at(c("stage_reached"), toupper) %>% 
   mutate(salary = ifelse(salary == "?", NA, salary))
 
 interviews_clean$key_phrases <-
-  (str_split(interviews_raw$key_phrases, ",") %>% 
+  (str_split(interviews_raw_2019$key_phrases, ",") %>% 
   map(str_trim) %>% 
   map(clean_names))
 ```
@@ -164,7 +167,7 @@ word_count_exact <-
   n = map_int(unique(key_words), count_exact_words, key_words)) %>% 
   arrange(desc(n))
 
-word_count_exact %>% top_n(7) %>% 
+word_count_exact %>% top_n(10) %>% 
   knitr::kable(caption = "Top 7 Key Words") %>% 
   kableExtra::kable_styling(full_width = FALSE)
 ```

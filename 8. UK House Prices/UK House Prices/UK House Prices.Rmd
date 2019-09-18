@@ -144,7 +144,7 @@ filter(prices, old_or_new == 'Y') %>%
 ```
 
 ### Seasonality
-Looking at the transaction prices over time might show some interesting seasonality, but I think it will depend heavily on the category and what summary statistic we use. With single outlier transactions in the hundreds of millions of pounds, it seems wise to be careful here.
+Looking at the transaction prices over time might show some  seasonality, but I think it will depend heavily on the category and what summary statistic we use. With outlier transactions in the hundreds of millions of pounds, it seems wise to be careful here.
 ```{r exploration 4, fig.width = 12, fig.height = 7}
 prices %>% 
   mutate(month = format(transfer_date, "%Y%m"),
@@ -181,18 +181,19 @@ terraced_ts <-
 
 
 ```{r}
-terraced_ts_models <- 
-  terraced_ts %>%
-  model(ETS(price)) %>%
-  forecast()
+terraced_stl <-
+  terraced_ts %>% 
+  STL(price)
 ```
 
-
+Apparently there is not much seasonalit to the price, with the STL model only extracting a trend component from each time series. It's possible multiple years of data would lead to a more detailed model but for now (and based on the below plot) I don't think there will be much hay to make here.
 ```{r}
-terraced_ts_models[1,]$.distribution
+terraced_stl %>% 
+  gather(series_name, value, price:season_adjust) %>% 
+  ggplot(aes(month, value, colour = series_name)) +
+  geom_line() +
+  facet_wrap(vars(old_or_new, statistic, duration, series_name), ncol = 4)
 ```
 
-
-```{r}
-
-```
+### Naming and Numbering vs Price
+Can we correlate the names of areas or flat number with prices?

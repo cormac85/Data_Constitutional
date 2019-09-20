@@ -189,11 +189,47 @@ terraced_stl <-
 Apparently there is not much seasonalit to the price, with the STL model only extracting a trend component from each time series. It's possible multiple years of data would lead to a more detailed model but for now (and based on the below plot) I don't think there will be much hay to make here.
 ```{r}
 terraced_stl %>% 
+  filter(statistic == "median") %>% 
   gather(series_name, value, price:season_adjust) %>% 
   ggplot(aes(month, value, colour = series_name)) +
   geom_line() +
-  facet_wrap(vars(old_or_new, statistic, duration, series_name), ncol = 4)
+  facet_wrap(vars(old_or_new, statistic, duration, series_name), ncol = 8) +
+  blorg::blog_theme
 ```
 
 ### Naming and Numbering vs Price
 Can we correlate the names of areas or flat number with prices?
+```{r}
+prices <-
+  prices %>% 
+  mutate(street_name_end = stringr::word(street, -1),
+         paon_end = stringr::word(paon, -1),
+         saon_end = stringr::word(saon, -1),)
+
+prices_address_fragment_summary <-
+  prices %>% 
+  select(id, street_name_end, paon_end, saon_end) %>% 
+  gather(key = address_fragment_type, value = address_fragment, street_name_end:saon_end) %>% 
+  group_by(address_fragment_type, address_fragment) %>% 
+  summarise(count = n())
+
+
+prices_address_fragment_summary %>% 
+  ggplot(aes(count)) +
+  geom_density(adjust = 3) +
+  xlim(0, 20)
+
+prices_address_fragment_summary <-
+  prices_address_fragment_summary %>% 
+  arrange(count) %>% 
+  mutate(cumulative_count = cumsum(count),
+         proportion_of_total_count = cumulative_count / sum(count) )
+  
+
+
+```
+
+```{r}
+
+```
+

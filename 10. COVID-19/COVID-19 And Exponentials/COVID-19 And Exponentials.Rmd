@@ -1,0 +1,119 @@
+---
+title: "Generic Analysis Template"
+author: "by [Cormac Nolan](https://github.com/cormac85/) - `r format(Sys.time(), '%d %B %Y')`"
+output: 
+  html_document:
+    code_folding: "hide"
+    css: style.css
+    includes: 
+      after_body: footer.html
+      in_header: header.html
+editor_options: 
+  chunk_output_type: console
+---
+
+# Template {.tabset .tabset-fade .tabset-pills}
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+```{r libraries, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(rvest)
+```
+
+
+```{r functions}
+```
+
+
+```{r import}
+ireland_covid_wiki_url <- "https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_the_Republic_of_Ireland"
+
+wiki_html <- read_html(ireland_covid_wiki_url)
+wiki_html
+```
+
+## Clean
+```{r raw exploration}
+graph = rvest::html_nodes(wiki_html, css=".barbox")
+graph_data <- graph %>%  html_node("table") %>% html_table()
+```
+
+
+```{r clean 1}
+clean_graph_data <- graph_data[[1]][-c(1,3)]
+```
+
+
+```{r clean 2}
+names(clean_graph_data) <- c("date", "num_cases", "num_deaths")
+
+clean_graph_data <- 
+  clean_graph_data %>% 
+  filter(date != "Date" & date != "⋮" & !stringr::str_detect(date, "Source")) %>% 
+  tidyr::separate(num_cases, into=c("num_cases", "percent_case_growth"), sep="\\(") %>% 
+  tidyr::separate(num_deaths, into=c("num_deaths", "percent_death_growth"), sep = "\\(") %>% 
+  mutate_all(trimws, whitespace="[\\+\\)%]") %>% 
+  mutate(num_cases = str_replace(num_cases, ",", ""))
+  
+clean_graph_data <- 
+  clean_graph_data %>%
+  mutate_all(na_if, "n") %>% 
+  mutate_all(na_if, "") %>% 
+  mutate_all(na_if, "n.a.") %>% 
+  mutate_all(na_if, "=") %>% 
+  replace_na(list(percent_case_growth = 0,
+                  num_deaths = 0,
+                  percent_death_growth = 0)
+             ) %>% 
+  mutate(date = as.Date(date)) %>% 
+  mutate_at(vars(num_cases:percent_death_growth), as.numeric) %>% 
+  as_tibble()
+
+clean_graph_data
+```
+
+## Exploration
+```{r exploration 1}
+clean_graph_data %>%
+  ggplot(aes(date, num_cases)) +
+  geom_line() +
+  geom_line(d)
+```
+
+
+```{r exploration 2}
+
+```
+
+
+```{r exploration 3}
+
+```
+
+
+```{r summary}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```

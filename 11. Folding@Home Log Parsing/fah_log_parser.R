@@ -259,4 +259,24 @@ connections_df <-
   mutate(ip_address = str_extract(ip_address, "(\\d+).(\\d+).(\\d+).(\\d+)"))
 
 
-unique(connections_df$ip_address) %>%
+ip_address_df <- tibble(ip_address = unique(connections_df$ip_address))
+
+get_from_ip_api <- function(ip_addr) {
+  api_url <- "http://ip-api.com/json/"
+  api_query <- paste0(api_url, ip_addr)
+  httr::GET(api_query) %>% 
+    httr::content() %>% 
+    dplyr::as_tibble() %>% 
+    janitor::clean_names()
+}
+
+ip_address_df <- 
+  ip_address_df %>% 
+  mutate(ip_address_data = map(ip_address, get_from_ip_api)) %>% 
+  unnest()
+
+ip_address_df %>% 
+  group_by(country, city, org, isp) %>% 
+  summarise(connection_count = n()) %>% 
+  arrange(desc(connection_count))
+

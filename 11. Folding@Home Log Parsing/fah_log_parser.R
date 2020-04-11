@@ -22,7 +22,7 @@ if(!isTRUE(file.info(paste0(logs_path, backup_folder_name))$isdir))
   dir.create(paste0(logs_path, backup_folder_name))
 
 file.copy(paste0(logs_path,  list.files(pattern = "*.txt", path = logs_path)),
-          paste0(logs_path, backup_folder_name,  list.files(pattern = "*.txt", path = logs_path)))
+          paste0(logs_path, backup_folder_name,  "/",  list.files(pattern = "*.txt", path = logs_path)))
 
 # Read logs & do basic parsing
 logs <- 
@@ -92,11 +92,14 @@ add_processing_time_cols <- function(parsed_log){
     mutate(previous_step_timestamp = lag(log_timestamp, 1),
            step_time_diff = log_timestamp - previous_step_timestamp,
            step_time_diff = ifelse(step_time_diff > 1000, 0, step_time_diff))
+  
+  processing_time_df
 }
 
 get_processing_time_summary <- function(parsed_log) {
   processing_time_summary <- 
-    add_processing_time_cols(parsed_log) %>% 
+    parsed_log %>% 
+    add_processing_time_cols() %>% 
     group_by(folding_slot, work_unit, work_id) %>% 
     summarise(total_processing_time = sum(step_time_diff, na.rm = TRUE) / 3600)
   
@@ -123,6 +126,14 @@ processing_time_summary %>%
   summarise(total_processing_time = sum(total_processing_time),
             total_work_items_count = n()) %>% 
   mutate(proportion_time_processing = total_processing_time / total_log_duration)
+
+processing_time_summary %>%
+  ggplot(aes(total_processing_time)) +
+  geom_density(size = 1.2) + 
+  geom_vline(xintercept = median(processing_time_summary$total_processing_time), colour = "red") +
+  theme_minimal() +
+  labs(title = "Density Plot of Work Unit Processing Time",
+       y = "Density", x = "Work Unit Processing Time (hours)")
 
 # Acquired Credits
 get_credits <- function(log_df){

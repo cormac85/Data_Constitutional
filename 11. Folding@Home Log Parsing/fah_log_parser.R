@@ -16,10 +16,17 @@ read_log_with_date <- function(log_file_name, path){
   log_df
 }
 
+# Backup Logs
+if(!isTRUE(file.info(paste0(logs_path, "old_logs"))$isdir))
+  dir.create(paste0(logs_path, "old_logs"))
+
+file.copy(paste0(logs_path,  list.files(pattern = "*.txt", path = logs_path)),
+          paste0(logs_path, "old_logs/",  list.files(pattern = "*.txt", path = logs_path)))
+
+# Read logs & do basic parsing
 logs <- 
   tibble(log_file_name = list.files(pattern = "*.txt", path = logs_path)) %>% 
   mutate(log_df = map(log_file_name, read_log_with_date, logs_path))
-
 
 parsed_log <-
   logs %>% 
@@ -40,6 +47,10 @@ parsed_log_expanded <-
   parsed_log %>% 
   separate(col = message, into = as.character(1:13), sep = ":")
 
+# Split logs for various uses.
+# Each subset of rows in the logs have very different formats so
+# we need to split them up into more similar groups that can
+# then be analysed.
 log_errors_df <- 
   parsed_log_expanded %>% 
   filter(`1` %in% c("WARNING", "ERROR")) 
@@ -60,35 +71,58 @@ log_errors_df %>% mutate_all(as.factor) %>% summary()
 log_gpu_df %>% mutate_all(as.factor) %>% summary()
 
 # Processing Time
-processing_time_df <- 
-  parsed_log_expanded %>%
-  filter(str_detect(`3`, "^0x"),
-         str_detect(`4`, "Completed")) %>%
-  rename(work_unit = `1`, folding_slot = `2`, core = `3`, progress_message = `4`) %>% 
-  select(log_file_name, log_timestamp, log_date, log_time, folding_slot, work_unit, core, progress_message) %>% 
-  arrange(folding_slot, work_unit, log_timestamp)
-
-processing_time_df <- 
-  processing_time_df %>%
-  mutate(end_flag = str_detect(progress_message, "100\\%\\)")) %>% 
-  group_by(folding_slot, work_unit) %>%
-  mutate(work_id = cumsum(end_flag),
-         work_id = ifelse(end_flag, work_id - 1, work_id),
-         work_id = paste(folding_slot, work_unit, work_id, sep = "-")) %>%
-  group_by(work_id) %>% 
-  mutate(previous_step_timestamp = lag(log_timestamp, 1),
-         step_time_diff = log_timestamp - previous_step_timestamp,
-         step_time_diff = ifelse(step_time_diff > 1000, 0, step_time_diff))
-
-processing_time_summary <- 
-  processing_time_df %>% 
-  group_by(folding_slot, work_unit, work_id) %>% 
-  summarise(total_processing_time = sum(step_time_diff, na.rm = TRUE) / 3600)
+add_processing_time_cols <- function(parsed_log){
+  processing_time_df <- 
+    parsed_log %>%
+    filter(str_detect(`3`, "^0x"),
+           str_detect(`4`, "Completed")) %>%
+    rename(work_unit = `1`, folding_slot = `2`, core = `3`, progress_message = `4`) %>% 
+    select(log_file_name, log_timestamp, log_date, log_time, folding_slot, work_unit, core, progress_message) %>% 
+    arrange(folding_slot, work_unit, log_timestamp)
   
+  processing_time_df <- 
+    processing_time_df %>%
+    mutate(end_flag = str_detect(progress_message, "100\\%\\)")) %>% 
+    group_by(folding_slot, work_unit) %>%
+    mutate(work_id = cumsum(end_flag),
+           work_id = ifelse(end_flag, work_id - 1, work_id),
+           work_id = paste(folding_slot, work_unit, work_id, sep = "-")) %>%
+    group_by(work_id) %>% 
+    mutate(previous_step_timestamp = lag(log_timestamp, 1),
+           step_time_diff = log_timestamp - previous_step_timestamp,
+           step_time_diff = ifelse(step_time_diff > 1000, 0, step_time_diff))
+}
+
+get_processing_time_summary <- function(parsed_log) {
+  processing_time_summary <- 
+    add_processing_time_cols(parsed_log) %>% 
+    group_by(folding_slot, work_unit, work_id) %>% 
+    summarise(total_processing_time = sum(step_time_diff, na.rm = TRUE) / 3600)
+  
+  processing_time_summary
+}
+
+get_total_log_duration <- function(parsed_log) {
+  parsed_log %>% 
+    group_by(log_file_name) %>% 
+    summarise(start_log = min(log_timestamp),
+              end_log = max(log_timestamp)) %>% 
+    mutate(log_duration = (end_log - start_log)) %>% 
+    ungroup() %>% 
+    summarise(total_log_duration = sum(log_duration)) %>% 
+    pull(total_log_duration) %>% 
+    (function(x) as.integer(x) / 3600)
+}
+
+processing_time_summary <- get_processing_time_summary(parsed_log_expanded)
+total_log_duration <- get_total_log_duration(parsed_log_expanded)
+
 processing_time_summary %>% 
   group_by(folding_slot) %>% 
   summarise(total_processing_time = sum(total_processing_time),
-            total_work_items_count = n())
+            total_work_items_count = n()) %>% 
+  mutate(proportion_time_processing = total_processing_time / total_log_duration)
+
 # Acquired Credits
 get_credits <- function(log_df){
   log_df %>%
@@ -97,9 +131,6 @@ get_credits <- function(log_df){
     select(work_unit, folding_slot, credits_attributed, log_time, log_date, log_timestamp) %>% 
     mutate(credits_attributed = as.numeric(str_extract(credits_attributed, "\\d+")))
 }
-
-cpu_credits <- get_credits(log_cpu_df)
-gpu_credits <- get_credits(log_gpu_df)
 
 plot_credits <- function(credits_df) {
   credits_df %>% 
@@ -114,6 +145,11 @@ plot_credits <- function(credits_df) {
     scale_y_continuous(labels = scales::comma_format())
 }
 
+cpu_credits <- get_credits(log_cpu_df)
+gpu_credits <- get_credits(log_gpu_df)
+
 plot_credits(cpu_credits)
 plot_credits(gpu_credits)
+
+
 

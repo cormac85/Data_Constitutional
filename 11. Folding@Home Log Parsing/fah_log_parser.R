@@ -7,6 +7,7 @@ library(lubridate)
 library(ggplot2)
 
 logs_path <-  "~/../AppData/Roaming/FAHClient/logs/"
+backup_folder_name <- "old_logs"
 
 read_log_with_date <- function(log_file_name, path){
   file_path <- paste0(path, log_file_name)
@@ -17,11 +18,11 @@ read_log_with_date <- function(log_file_name, path){
 }
 
 # Backup Logs
-if(!isTRUE(file.info(paste0(logs_path, "old_logs"))$isdir))
-  dir.create(paste0(logs_path, "old_logs"))
+if(!isTRUE(file.info(paste0(logs_path, backup_folder_name))$isdir))
+  dir.create(paste0(logs_path, backup_folder_name))
 
 file.copy(paste0(logs_path,  list.files(pattern = "*.txt", path = logs_path)),
-          paste0(logs_path, "old_logs/",  list.files(pattern = "*.txt", path = logs_path)))
+          paste0(logs_path, backup_folder_name,  list.files(pattern = "*.txt", path = logs_path)))
 
 # Read logs & do basic parsing
 logs <- 
@@ -49,7 +50,7 @@ parsed_log_expanded <-
 
 # Split logs for various uses.
 # Each subset of rows in the logs have very different formats so
-# we need to split them up into more similar groups that can
+# we need to split them up into more self-similar groups that can
 # then be analysed.
 log_errors_df <- 
   parsed_log_expanded %>% 
@@ -137,8 +138,11 @@ plot_credits <- function(credits_df) {
     ggplot() +
     geom_col(aes(log_date, credits_attributed, fill = as.character(log_time)), 
              position = "stack") +
+    theme_minimal() +
     scale_x_date(date_breaks = "1 day", date_labels ="%a %F") +
-    theme(legend.position = "none", axis.text.x = element_text(angle = 30, hjust = 1)) +
+    theme(legend.position = "none", axis.text.x = element_text(angle = 30, hjust = 1),
+          panel.grid.major.x = element_blank(),
+          panel.grid.minor.x = element_blank()) +
     labs(title = paste0(unique(credits_df$folding_slot, collapse = " - "), ": Credits Acquired Per Day"), 
          subtitle = paste0(min(credits_df$log_date), " - ", max(credits_df$log_date)),
          x = "Date", y = "Credits") +

@@ -56,20 +56,14 @@ log_errors_df <-
   parsed_log_expanded %>% 
   filter(`1` %in% c("WARNING", "ERROR")) 
 
-log_cpu_df <- 
+log_work_units_df <- 
   parsed_log_expanded %>% 
-  filter(!`1` %in% c("WARNING", "ERROR") & `2` == "FS00") %>% 
-  rename(work_unit = `1`,
-         folding_slot = `2`)
-
-log_gpu_df <- 
-  parsed_log_expanded %>% 
-  filter(!`1` %in% c("WARNING", "ERROR") & `2` == "FS01") %>% 
+  filter(!`1` %in% c("WARNING", "ERROR") & str_detect(`2`, "FS\\d\\d")) %>% 
   rename(work_unit = `1`,
          folding_slot = `2`)
 
 log_errors_df %>% mutate_all(as.factor) %>% summary()
-log_gpu_df %>% mutate_all(as.factor) %>% summary()
+log_work_units_df %>% mutate_all(as.factor) %>% summary()
 
 # Processing Time
 add_processing_time_cols <- function(parsed_log){
@@ -160,11 +154,98 @@ plot_credits <- function(credits_df) {
     scale_y_continuous(labels = scales::comma_format())
 }
 
-cpu_credits <- get_credits(log_cpu_df)
-gpu_credits <- get_credits(log_gpu_df)
 
-plot_credits(cpu_credits)
-plot_credits(gpu_credits)
+credits <- get_credits(log_work_units_df)
+
+credits %>% 
+  filter(folding_slot == "FS00") %>% 
+  plot_credits()
+
+credits %>% 
+  filter(folding_slot == "FS01") %>% 
+  plot_credits()
 
 
+# Credits per Hour
+folding_slot_summary <- 
+  credits %>% 
+  group_by(folding_slot) %>% 
+  summarise(credits_attributed = sum(credits_attributed)) %>%
+  left_join(
+    processing_time_summary %>% 
+      group_by(folding_slot) %>% 
+      summarise(total_processing_time = sum(total_processing_time),
+                total_work_items_count = n()) %>% 
+      mutate(proportion_time_processing = total_processing_time / total_log_duration),
+    by = "folding_slot"
+    ) %>% 
+  mutate(credits_per_processing_hour = credits_attributed / total_processing_time,
+         credits_per_log_hour = credits_attributed / total_log_duration)
 
+folding_slot_summary
+
+# Network Usage
+
+get_network_usage <- function(work_units_df) {
+  work_units_df %>% 
+    filter(str_detect(`3`, "Downloading")) %>% 
+    rename(usage_mib = `3`) %>% 
+    select(log_file_name, folding_slot, work_unit, log_timestamp, log_date, log_time, usage_mib) %>% 
+    mutate(usage_mib = str_extract(usage_mib, "(\\d+).(\\d+)"),
+           network_direction = "download") %>% 
+    union_all(
+      work_units_df %>% 
+        filter(str_detect(`3`, "Uploading")) %>% 
+        rename(usage_mib = `3`) %>% 
+        select(log_file_name, folding_slot, work_unit, log_timestamp, log_date, log_time, usage_mib) %>% 
+        mutate(usage_mib = str_extract(usage_mib, "(\\d+).(\\d+)"),
+               network_direction = "upload")
+    ) %>% 
+    mutate(usage_mib = as.numeric(usage_mib))  
+}
+
+calculate_daily_network_usage <- function(network_usage_df) {
+  network_usage_df %>% 
+    group_by(log_date, folding_slot, network_direction) %>% 
+    summarise(total_usage_mib = sum(usage_mib)) %>% 
+    ungroup() %>% 
+    complete(folding_slot, 
+             network_direction,
+             log_date = seq.Date(min(log_date), max(log_date), by = "day"), 
+             fill = list(total_usage_mib = 0)) %>% 
+    arrange(log_date)
+}
+
+network_usage_df <- get_network_usage(log_work_units_df)
+
+network_usage_df %>% 
+  group_by(folding_slot, network_direction) %>% 
+  summarise(total_usage_mib = sum(usage_mib),
+            median_usage = median(usage_mib),
+            usage_quantile_25 = quantile(usage_mib, 0.25),
+            usage_quantile_75 = quantile(usage_mib, 0.75),
+            max_usage = max(usage_mib)) %>% 
+  arrange(network_direction)
+
+network_usage_daily_summary <- calculate_daily_network_usage(network_usage_df) 
+
+network_usage_daily_summary %>% 
+  ggplot(aes(log_date, total_usage_mib / 1024, fill = network_direction)) +
+  geom_col() + 
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2") +
+  labs(title = "Network Usage per Day",
+       x = "Date", y = "Cumulative Usage (GiB)")
+
+network_usage_daily_summary %>% 
+  arrange(folding_slot, network_direction, log_date) %>% 
+  group_by(folding_slot, network_direction) %>% 
+  mutate(cumulative_usage_mib = cumsum(total_usage_mib)) %>%
+  ggplot(aes(log_date, cumulative_usage_mib / 1024, fill = network_direction)) +
+  geom_col() + 
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2") +
+  facet_wrap(~folding_slot) +
+  labs(title = "Cumulative Network Usage by Folding Slot",
+       x = "Date", y = "Cumulative Usage (GiB)")
+  

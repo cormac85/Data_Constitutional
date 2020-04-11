@@ -248,4 +248,15 @@ network_usage_daily_summary %>%
   facet_wrap(~folding_slot) +
   labs(title = "Cumulative Network Usage by Folding Slot",
        x = "Date", y = "Cumulative Usage (GiB)")
-  
+
+
+# IP Address Lookup
+connections_df <- 
+  log_work_units_df %>% 
+  filter(str_detect(`3`, "Connecting")) %>% 
+  rename(ip_address = `3`) %>% 
+  select(log_file_name, log_timestamp, log_date, log_time, folding_slot, work_unit, ip_address) %>% 
+  mutate(ip_address = str_extract(ip_address, "(\\d+).(\\d+).(\\d+).(\\d+)"))
+
+
+unique(connections_df$ip_address) %>%

@@ -5,6 +5,7 @@ library(purrr)
 library(tidyr)
 library(lubridate)
 library(ggplot2)
+library(gridExtra)
 
 logs_path <-  "~/../AppData/Roaming/FAHClient/logs/old_logs/"
 backup_folder_name <- "old_logs"
@@ -241,18 +242,42 @@ network_usage_daily_summary %>%
   labs(title = "Network Usage per Day",
        x = "Date", y = "Cumulative Usage (GiB)")
 
-network_usage_daily_summary %>% 
+total_usage_gib <- sum(network_usage_daily_summary$total_usage_mib) / 1024
+
+cumulative_plot_by_slot <- 
+  network_usage_daily_summary %>% 
   arrange(folding_slot, network_direction, log_date) %>% 
   group_by(folding_slot, network_direction) %>% 
   mutate(cumulative_usage_mib = cumsum(total_usage_mib)) %>%
   ggplot(aes(log_date, cumulative_usage_mib / 1024, fill = network_direction)) +
   geom_col() + 
   theme_minimal() +
+  theme(legend.position = "top") +
   scale_fill_brewer(palette = "Set2") +
-  facet_wrap(~folding_slot) +
+  facet_wrap(~folding_slot, ncol = 1) +
   labs(title = "Cumulative Network Usage by Folding Slot",
-       x = "Date", y = "Cumulative Usage (GiB)")
+       x = "Date", y = "Cumulative Usage (GiB)") +
+  ylim(c(0, total_usage_gib))
 
+cumulative_plot <- 
+  network_usage_daily_summary %>% 
+  arrange(folding_slot, network_direction, log_date) %>% 
+  group_by(folding_slot, network_direction) %>% 
+  mutate(cumulative_usage_mib = cumsum(total_usage_mib))  %>%
+  group_by(log_date) %>% 
+  mutate(cumulative_usage_mib = sum(cumulative_usage_mib)) %>% 
+  ggplot(aes(log_date, cumulative_usage_mib / 1024)) +
+  geom_line(colour = RColorBrewer::brewer.pal(3, "Set2")[3], size = 1) + 
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2") +
+  labs(title = "Total Cumulative Network Usage", 
+       subtitle = "Upload + Download",
+       x = "Date", y = "Cumulative Usage (GiB)") +
+  ylim(c(0, total_usage_gib))
+
+
+gridExtra::grid.arrange(cumulative_plot_by_slot, cumulative_plot,
+                        heights=c(2,1))
 
 # IP Address Lookup
 connections_df <- 

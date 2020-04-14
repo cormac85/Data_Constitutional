@@ -78,9 +78,12 @@ clean_graph_data
 ## Exploration
 ```{r exploration 1}
 clean_graph_data %>%
-  ggplot(aes(date, num_cases)) +
-  geom_line() +
-  geom_line(d)
+  select(date, num_cases, num_deaths) %>% 
+  mutate(num_cases = num_cases) %>% 
+  tidyr::pivot_longer(cols = c("num_cases", "num_deaths"), names_to = "metric", values_to = "count") %>% 
+  ggplot(aes(date, count, fill = metric, colour = metric)) +
+  geom_col(position = "dodge") +
+  theme_minimal()
 ```
 
 

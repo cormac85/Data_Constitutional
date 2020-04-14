@@ -6,7 +6,7 @@ library(tidyr)
 library(lubridate)
 library(ggplot2)
 
-logs_path <-  "~/../AppData/Roaming/FAHClient/logs/"
+logs_path <-  "~/../AppData/Roaming/FAHClient/logs/old_logs/"
 backup_folder_name <- "old_logs"
 
 read_log_with_date <- function(log_file_name, path){
@@ -17,12 +17,16 @@ read_log_with_date <- function(log_file_name, path){
   log_df
 }
 
-# Backup Logs
-if(!isTRUE(file.info(paste0(logs_path, backup_folder_name))$isdir))
-  dir.create(paste0(logs_path, backup_folder_name))
 
-file.copy(paste0(logs_path,  list.files(pattern = "*.txt", path = logs_path)),
-          paste0(logs_path, backup_folder_name,  "/",  list.files(pattern = "*.txt", path = logs_path)))
+# This logic at the start should backup the current "active" folder to "old_logs" 
+# and then read from the full set of files in the "old_logs" folder.
+
+# Backup Logs
+# if(!isTRUE(file.info(paste0(logs_path, backup_folder_name))$isdir))
+#   dir.create(paste0(logs_path, backup_folder_name))
+# 
+# file.copy(paste0(logs_path,  list.files(pattern = "*.txt", path = logs_path)),
+#           paste0(logs_path, backup_folder_name,  "/",  list.files(pattern = "*.txt", path = logs_path)))
 
 # Read logs & do basic parsing
 logs <- 
@@ -266,14 +270,16 @@ get_from_ip_api <- function(ip_addr) {
   api_query <- paste0(api_url, ip_addr)
   httr::GET(api_query) %>% 
     httr::content() %>% 
-    dplyr::as_tibble() %>% 
+    unlist() %>% 
+    tibble::enframe() %>%
+    tidyr::pivot_wider() %>% 
     janitor::clean_names()
 }
 
 ip_address_df <- 
   ip_address_df %>% 
   mutate(ip_address_data = map(ip_address, get_from_ip_api)) %>% 
-  unnest()
+  unnest(cols = c(ip_address_data))
 
 ip_address_df %>% 
   group_by(country, city, org, isp) %>% 

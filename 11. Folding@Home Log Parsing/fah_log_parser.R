@@ -153,17 +153,17 @@ plot_credits <- function(credits_df) {
     theme(legend.position = "none", axis.text.x = element_text(angle = 30, hjust = 1),
           panel.grid.major.x = element_blank(),
           panel.grid.minor.x = element_blank()) +
-    labs(title = paste0(unique(credits_df$folding_slot, collapse = " - "), ": Credits Acquired Per Day"), 
+    labs(title = "Credits Acquired Per Day", 
          subtitle = paste0(min(credits_df$log_date), " - ", max(credits_df$log_date)),
          x = "Date", y = "Credits") +
-    scale_y_continuous(labels = scales::comma_format())
+    scale_y_continuous(labels = scales::comma_format()) +
+    facet_wrap(~folding_slot, ncol=1)
 }
 
 
 credits <- get_credits(log_work_units_df)
 
 credits %>% 
-  filter(folding_slot == "FS00") %>% 
   plot_credits()
 
 credits %>% 
